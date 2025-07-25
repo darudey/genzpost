@@ -146,7 +146,7 @@ export function LayoutCanvasClient() {
         lastTapTime = now;
         lastTapTarget = target;
         
-        if (isCropMode && opt.target) {
+        if (isCropMode && opt.target && opt.target === canvas.getActiveObject()) {
             isDragging = true;
             this.selection = false;
             lastPosX = evt.clientX;
@@ -261,18 +261,20 @@ export function LayoutCanvasClient() {
                 }
               }
             } else {
-              if (!isDragging) {
-                  isDragging = true;
-                  lastPosX = e.touches[0].clientX;
-                  lastPosY = e.touches[0].clientY;
-              } else {
-                const vpt = this.viewportTransform;
-                if (vpt) {
-                    vpt[4] += e.touches[0].clientX - lastPosX;
-                    vpt[5] += e.touches[0].clientY - lastPosY;
-                    this.requestRenderAll();
+              if (!this.getActiveObject()) { // only pan canvas if no object is selected
+                if (!isDragging) {
+                    isDragging = true;
                     lastPosX = e.touches[0].clientX;
                     lastPosY = e.touches[0].clientY;
+                } else {
+                  const vpt = this.viewportTransform;
+                  if (vpt) {
+                      vpt[4] += e.touches[0].clientX - lastPosX;
+                      vpt[5] += e.touches[0].clientY - lastPosY;
+                      this.requestRenderAll();
+                      lastPosX = e.touches[0].clientX;
+                      lastPosY = e.touches[0].clientY;
+                  }
                 }
               }
             }
@@ -280,7 +282,7 @@ export function LayoutCanvasClient() {
     });
     
     // --- TOUCH END: Reset flags ---
-    canvas.on('mouse:up', function(opt) {
+    canvas.on('touch:drag:end', function(opt) {
         isDragging = false;
         this.selection = true;
     });
@@ -839,3 +841,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
