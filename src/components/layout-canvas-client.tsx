@@ -47,6 +47,7 @@ import {
   PlusSquare,
   RectangleHorizontal,
   Settings,
+  CheckSquare,
 } from "lucide-react";
 import { autoBackgroundFill } from "@/ai/flows/auto-background-fill";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
@@ -76,6 +77,7 @@ export function LayoutCanvasClient() {
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
   const [newSize, setNewSize] = useState({ width: "", height: "" });
+  const [isCropMode, setIsCropMode] = useState(false);
   
   const canvasSize = canvasSizes[currentSizeKey as CanvasSizeKey];
 
@@ -90,14 +92,34 @@ export function LayoutCanvasClient() {
     fabricCanvasRef.current = canvas;
     
     canvas.on('mouse:wheel', function(opt) {
-      const delta = opt.e.deltaY;
-      let zoom = canvas.getZoom();
-      zoom *= 0.999 ** delta;
-      if (zoom > 20) zoom = 20;
-      if (zoom < 0.01) zoom = 0.01;
-      canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
-      opt.e.preventDefault();
-      opt.e.stopPropagation();
+      if (isCropMode) {
+        const target = canvas.getActiveObject();
+        if (!target || target.type !== 'rect') return;
+        const pattern = (target as fabric.Rect).fill as fabric.Pattern;
+        if (!pattern) return;
+        const e = opt.e;
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const delta = e.deltaY;
+        let zoom = pattern.get('scaleX') || 1;
+        zoom *= 0.999 ** delta;
+        if (zoom < 0.1) zoom = 0.1;
+        if (zoom > 10) zoom = 10;
+        
+        pattern.scaleX = zoom;
+        pattern.scaleY = zoom;
+        canvas.requestRenderAll();
+      } else {
+        const delta = opt.e.deltaY;
+        let zoom = canvas.getZoom();
+        zoom *= 0.999 ** delta;
+        if (zoom > 20) zoom = 20;
+        if (zoom < 0.01) zoom = 0.01;
+        canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
+        opt.e.preventDefault();
+        opt.e.stopPropagation();
+      }
     });
 
     let lastPosX: number, lastPosY: number;
@@ -106,7 +128,15 @@ export function LayoutCanvasClient() {
     
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
-      if (evt.altKey === true) {
+      if (isCropMode) {
+        const target = canvas.getActiveObject();
+        if (target) {
+            isDragging = true;
+            this.selection = false;
+            lastPosX = evt.clientX;
+            lastPosY = evt.clientY;
+        }
+      } else if (evt.altKey === true) {
         isDragging = true;
         this.selection = false;
         lastPosX = evt.clientX;
@@ -118,24 +148,38 @@ export function LayoutCanvasClient() {
     canvas.on('mouse:move', function(opt) {
       if (isDragging) {
         const e = opt.e;
-        const vpt = this.viewportTransform;
-        if (vpt) {
-            vpt[4] += e.clientX - lastPosX;
-            vpt[5] += e.clientY - lastPosY;
-            this.requestRenderAll();
-            lastPosX = e.clientX;
-            lastPosY = e.clientY;
+        if (isCropMode) {
+          const target = canvas.getActiveObject();
+          if (target && target.type === 'rect') {
+            const pattern = (target as fabric.Rect).fill as fabric.Pattern;
+            if (pattern) {
+                pattern.offsetX! += (e.clientX - lastPosX);
+                pattern.offsetY! += (e.clientY - lastPosY);
+                this.requestRenderAll();
+                lastPosX = e.clientX;
+                lastPosY = e.clientY;
+            }
+          }
+        } else {
+            const vpt = this.viewportTransform;
+            if (vpt) {
+                vpt[4] += e.clientX - lastPosX;
+                vpt[5] += e.clientY - lastPosY;
+                this.requestRenderAll();
+                lastPosX = e.clientX;
+                lastPosY = e.clientY;
+            }
         }
       }
     });
 
     canvas.on('mouse:up', function(opt) {
       if (isDragging) {
-        this.setViewportTransform(this.viewportTransform);
+        if(!isCropMode) this.setViewportTransform(this.viewportTransform);
         isDragging = false;
         this.selection = true;
       }
-       if (touchStartPos) {
+       if (touchStartPos && !isCropMode) {
         const touchEndPos = opt.e;
         const distance = Math.sqrt(
             Math.pow(touchEndPos.clientX - touchStartPos.x, 2) +
@@ -155,20 +199,47 @@ export function LayoutCanvasClient() {
       touchStartPos = null;
     });
 
+    canvas.on('mouse:dblclick', (opt) => {
+        const target = opt.target;
+        if (target && target.type === 'rect') {
+            enterCropMode(target as fabric.Rect);
+        }
+    });
+
     canvas.on('touch:gesture', function(opt: any) {
         if (opt.e.touches && opt.e.touches.length == 2) {
-            isDragging = false; 
-            const e = opt.e;
-            if (opt.state == 'start') {
+            isDragging = false;
+            if (isCropMode) {
+                const target = canvas.getActiveObject();
+                if (!target || target.type !== 'rect') return;
+                const pattern = (target as fabric.Rect).fill as fabric.Pattern;
+                if (!pattern) return;
+                
+                if (opt.state == 'start') {
+                    // @ts-ignore
+                    this.zoomStartScale = pattern.scaleX;
+                }
                 // @ts-ignore
-                this.zoomStartScale = this.getZoom();
+                let scale = this.zoomStartScale * opt.scale;
+                if (scale < 0.1) scale = 0.1;
+                if (scale > 10) scale = 10;
+                
+                pattern.scaleX = scale;
+                pattern.scaleY = scale;
+                canvas.requestRenderAll();
+            } else {
+                const e = opt.e;
+                if (opt.state == 'start') {
+                    // @ts-ignore
+                    this.zoomStartScale = this.getZoom();
+                }
+                // @ts-ignore
+                let scale = this.zoomStartScale * opt.scale;
+                if (scale > 20) scale = 20;
+                if (scale < 0.01) scale = 0.01;
+                // @ts-ignore
+                this.zoomToPoint({ x: opt.mid.x, y: opt.mid.y }, scale);
             }
-            // @ts-ignore
-            let scale = this.zoomStartScale * opt.scale;
-            if (scale > 20) scale = 20;
-            if (scale < 0.01) scale = 0.01;
-            // @ts-ignore
-            this.zoomToPoint({ x: opt.mid.x, y: opt.mid.y }, scale);
         }
     });
 
@@ -184,6 +255,19 @@ export function LayoutCanvasClient() {
                     touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                 }
             } else {
+              if(isCropMode) {
+                const target = canvas.getActiveObject();
+                if (target && target.type === 'rect') {
+                  const pattern = (target as fabric.Rect).fill as fabric.Pattern;
+                  if (pattern) {
+                      pattern.offsetX! += (e.touches[0].clientX - lastPosX);
+                      pattern.offsetY! += (e.touches[0].clientY - lastPosY);
+                      this.requestRenderAll();
+                      lastPosX = e.touches[0].clientX;
+                      lastPosY = e.touches[0].clientY;
+                  }
+                }
+              } else {
                 const vpt = this.viewportTransform;
                 if (vpt) {
                     vpt[4] += e.touches[0].clientX - lastPosX;
@@ -192,12 +276,13 @@ export function LayoutCanvasClient() {
                     lastPosX = e.touches[0].clientX;
                     lastPosY = e.touches[0].clientY;
                 }
+              }
             }
         }
     });
 
     return canvas;
-  }, []);
+  }, [isCropMode]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -257,6 +342,42 @@ export function LayoutCanvasClient() {
         canvas.renderAll();
     }
   }, [canvasBgColor]);
+
+  const enterCropMode = (target: fabric.Rect) => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    setIsCropMode(true);
+    canvas.setActiveObject(target);
+    target.set({
+      selectable: false,
+      evented: true,
+      lockMovementX: true,
+      lockMovementY: true,
+      lockScalingX: true,
+      lockScalingY: true,
+      lockRotation: true,
+    });
+    canvas.renderAll();
+  }
+
+  const exitCropMode = () => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    const activeObject = canvas.getActiveObject();
+    if(activeObject) {
+      activeObject.set({
+        selectable: true,
+        lockMovementX: false,
+        lockMovementY: false,
+        lockScalingX: false,
+        lockScalingY: false,
+        lockRotation: false,
+      });
+      canvas.discardActiveObject();
+    }
+    setIsCropMode(false);
+    canvas.renderAll();
+  }
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -396,12 +517,12 @@ export function LayoutCanvasClient() {
                 pattern.offsetX = (box.width! - fabricImg.width! * scale) / 2;
                 pattern.offsetY = (box.height! - fabricImg.height! * scale) / 2;
                 
-                fabricImg.scaleX = scale;
-                fabricImg.scaleY = scale;
+                pattern.scaleX = scale;
+                pattern.scaleY = scale;
 
                 canvas?.renderAll();
                 setIsAiProcessing(false);
-            });
+            }, { crossOrigin: 'anonymous' });
         };
     };
     e.target.value = "";
@@ -528,10 +649,18 @@ export function LayoutCanvasClient() {
   };
   
   return (
-    <div className="flex flex-col h-full bg-background text-foreground font-body">
+    <div className="flex flex-col h-full bg-muted/80 text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/80 flex items-center justify-center">
+        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/80 flex items-center justify-center relative">
             <canvas ref={canvasRef} className="shadow-lg" />
+            {isCropMode && (
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
+                <Button onClick={exitCropMode} variant="secondary">
+                  <CheckSquare className="mr-2 h-4 w-4" />
+                  Done
+                </Button>
+              </div>
+            )}
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-background">
@@ -539,7 +668,7 @@ export function LayoutCanvasClient() {
               <div className="flex justify-center items-center space-x-2 pb-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant='ghost' size="icon">
+                    <Button variant='ghost' size="icon" disabled={isCropMode}>
                       <MousePointer />
                     </Button>
                   </TooltipTrigger>
@@ -548,7 +677,7 @@ export function LayoutCanvasClient() {
                 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
+                        <Button variant="ghost" size="icon" disabled={isAiProcessing || isCropMode} onClick={() => templateInputRef.current?.click()}>
                             {isAiProcessing ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
                         </Button>
                     </TooltipTrigger>
@@ -558,7 +687,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={addBox}>
+                        <Button variant="ghost" size="icon" onClick={addBox} disabled={isCropMode}>
                             <PlusSquare />
                         </Button>
                     </TooltipTrigger>
@@ -571,7 +700,7 @@ export function LayoutCanvasClient() {
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon">
+                                <Button variant="ghost" size="icon" disabled={isCropMode}>
                                     <RectangleHorizontal />
                                 </Button>
                             </PopoverTrigger>
@@ -618,7 +747,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()}>
+                        <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()} disabled={isCropMode}>
                             <Palette />
                         </Button>
                     </TooltipTrigger>
@@ -628,7 +757,7 @@ export function LayoutCanvasClient() {
                 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => imageInputRef.current?.click()}>
+                        <Button variant="ghost" size="icon" disabled={isAiProcessing || isCropMode} onClick={() => imageInputRef.current?.click()}>
                             {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
                         </Button>
                     </TooltipTrigger>
@@ -638,7 +767,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => changeZIndex('front')}>
+                        <Button variant="ghost" size="icon" onClick={() => changeZIndex('front')} disabled={isCropMode}>
                             <BringToFront />
                         </Button>
                     </TooltipTrigger>
@@ -647,7 +776,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => changeZIndex('back')}>
+                        <Button variant="ghost" size="icon" onClick={() => changeZIndex('back')} disabled={isCropMode}>
                             <SendToBack />
                         </Button>
                     </TooltipTrigger>
@@ -656,7 +785,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={deleteActiveBox}>
+                        <Button variant="ghost" size="icon" onClick={deleteActiveBox} disabled={isCropMode}>
                             <Trash2 />
                         </Button>
                     </TooltipTrigger>
@@ -667,7 +796,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={exportImage}>
+                        <Button variant="ghost" size="icon" onClick={exportImage} disabled={isCropMode}>
                             <Download />
                         </Button>
                     </TooltipTrigger>
