@@ -77,6 +77,7 @@ export function LayoutCanvasClient() {
   const [canvasSizes, setCanvasSizes] = useState(INITIAL_CANVAS_SIZES);
   const [currentSizeKey, setCurrentSizeKey] = useState<string>("1024x768");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
+  const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
   const [newSize, setNewSize] = useState({ width: "", height: "" });
   
@@ -233,6 +234,7 @@ export function LayoutCanvasClient() {
     const canvas = initCanvas();
     fabricCanvasRef.current = canvas;
     fitCanvasToContainer();
+    setIsSizePopoverOpen(true);
     
     window.addEventListener('resize', fitCanvasToContainer);
 
@@ -563,7 +565,7 @@ export function LayoutCanvasClient() {
 
                 <div className="flex-grow" />
                 
-                <Popover>
+                <Popover open={isSizePopoverOpen} onOpenChange={setIsSizePopoverOpen}>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <PopoverTrigger asChild>
@@ -574,34 +576,40 @@ export function LayoutCanvasClient() {
                         </TooltipTrigger>
                         <TooltipContent side="top"><p>Canvas Size</p></TooltipContent>
                     </Tooltip>
-                    <PopoverContent className="w-auto p-0">
-                        <div className="p-2 flex items-center gap-2">
-                            <Select
-                                value={currentSizeKey}
-                                onValueChange={(value: string) => setCurrentSizeKey(value)}
-                            >
-                                <SelectTrigger className="w-[120px]">
-                                <SelectValue placeholder="Canvas size" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                {Object.keys(canvasSizes).map(key => (
-                                    <SelectItem key={key} value={key}>{key}</SelectItem>
-                                ))}
-                                </SelectContent>
-                            </Select>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={() => {
-                                        setTempSizes(canvasSizes);
-                                        setIsEditSizesOpen(true);
-                                    }}>
-                                        <Settings className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Edit Sizes</p>
-                                </TooltipContent>
-                            </Tooltip>
+                    <PopoverContent className="w-auto p-4">
+                        <div className="grid gap-2">
+                            <p className="text-sm font-medium text-center">Select your canvas size</p>
+                            <div className="flex items-center gap-2">
+                                <Select
+                                    value={currentSizeKey}
+                                    onValueChange={(value: string) => {
+                                      setCurrentSizeKey(value);
+                                      setIsSizePopoverOpen(false);
+                                    }}
+                                >
+                                    <SelectTrigger className="w-[120px]">
+                                    <SelectValue placeholder="Canvas size" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                    {Object.keys(canvasSizes).map(key => (
+                                        <SelectItem key={key} value={key}>{key}</SelectItem>
+                                    ))}
+                                    </SelectContent>
+                                </Select>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" onClick={() => {
+                                            setTempSizes(canvasSizes);
+                                            setIsEditSizesOpen(true);
+                                        }}>
+                                            <Settings className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Edit Sizes</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
                         </div>
                     </PopoverContent>
                 </Popover>
