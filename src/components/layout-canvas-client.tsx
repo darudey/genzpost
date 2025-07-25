@@ -313,29 +313,32 @@ export function LayoutCanvasClient() {
           const placeholderWidth = Math.round(b.width * scaleFactor);
           const placeholderHeight = Math.round(b.height * scaleFactor);
 
-          const rect = new fabric.Rect({
-            left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
-            top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
-            width: placeholderWidth,
-            height: placeholderHeight,
-            fill: 'transparent',
-            stroke: '#ccc',
-            strokeWidth: 2,
-            selectable: true,
-          });
-
           fabric.Image.fromURL(`https://picsum.photos/${placeholderWidth}/${placeholderHeight}?grayscale&blur=2`, (img) => {
-            rect.set('fill', new fabric.Pattern({
-              source: img.getElement(),
-              repeat: 'no-repeat',
-            }));
-            canvas.renderAll();
-          }, { crossOrigin: 'anonymous' });
+              if (img.getElement() === null) {
+                  console.error("Failed to load placeholder image");
+                  return;
+              }
+              const rect = new fabric.Rect({
+                left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
+                top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
+                width: placeholderWidth,
+                height: placeholderHeight,
+                fill: 'transparent',
+                stroke: '#ccc',
+                strokeWidth: 2,
+                selectable: true,
+              });
 
-          canvas.add(rect);
+              rect.set('fill', new fabric.Pattern({
+                source: img.getElement(),
+                repeat: 'no-repeat',
+              }));
+              
+              canvas.add(rect);
+              canvas.renderAll();
+          }, { crossOrigin: 'anonymous' });
         });
         
-        canvas.renderAll();
         toast({ title: "✅ AI layout detection complete!", description: `Found ${detectedBoxes.length} boxes.`, variant: "default" });
 
       } catch(err) {
@@ -415,28 +418,32 @@ export function LayoutCanvasClient() {
 
     const rectWidth = 200;
     const rectHeight = 200;
-
-    const rect = new fabric.Rect({
-      left: (canvasSize.width - rectWidth) / 2,
-      top: (canvasSize.height - rectHeight) / 2,
-      width: rectWidth,
-      height: rectHeight,
-      fill: 'transparent',
-      stroke: '#ccc',
-      strokeWidth: 2,
-    });
     
     fabric.Image.fromURL(`https://picsum.photos/${rectWidth}/${rectHeight}?grayscale&blur=2`, (img) => {
-      rect.set('fill', new fabric.Pattern({
-        source: img.getElement(),
-        repeat: 'no-repeat',
-      }));
-      canvas.renderAll();
+        if (img.getElement() === null) {
+            console.error("Failed to load placeholder image");
+            return;
+        }
+
+        const rect = new fabric.Rect({
+            left: (canvasSize.width - rectWidth) / 2,
+            top: (canvasSize.height - rectHeight) / 2,
+            width: rectWidth,
+            height: rectHeight,
+            fill: 'transparent',
+            stroke: '#ccc',
+            strokeWidth: 2,
+        });
+
+        rect.set('fill', new fabric.Pattern({
+            source: img.getElement(),
+            repeat: 'no-repeat',
+        }));
+        
+        canvas.add(rect);
+        canvas.setActiveObject(rect);
+        canvas.renderAll();
     }, { crossOrigin: 'anonymous' });
-    
-    canvas.add(rect);
-    canvas.setActiveObject(rect);
-    canvas.renderAll();
   };
   
   const deleteActiveBox = () => {
