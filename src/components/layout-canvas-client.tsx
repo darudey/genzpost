@@ -243,55 +243,65 @@ export function LayoutCanvasClient() {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        setIsAiProcessing(true);
-        try {
-            toast({ title: "🤖 AI is detecting layout...", description: "This might take a moment." });
-            const result = await detectLayoutStructure({ imageDataUri: dataUrl });
+      const dataUrl = reader.result as string;
+      setIsAiProcessing(true);
+      try {
+        toast({ title: "🤖 AI is detecting layout...", description: "This might take a moment." });
+        const result = await detectLayoutStructure({ imageDataUri: dataUrl });
 
-            if (!result.boxes || result.boxes.length === 0) {
-                toast({ title: "No layout detected", description: "Couldn't find any boxes in the image.", variant: "destructive" });
-                return;
-            }
-
-            const image = new Image();
-            image.src = dataUrl;
-            image.onload = () => {
-                const imgWidth = image.naturalWidth;
-                const imgHeight = image.naturalHeight;
-
-                const scaleX = CANVAS_WIDTH / imgWidth;
-                const scaleY = CANVAS_HEIGHT / imgHeight;
-                const scale = Math.min(scaleX, scaleY);
-                
-                const offsetX = (CANVAS_WIDTH - imgWidth * scale) / 2;
-                const offsetY = (CANVAS_HEIGHT - imgHeight * scale) / 2;
-
-                let currentId = nextBoxId;
-                const newBoxes = result.boxes.map((b) => {
-                    const box: Box = {
-                        id: currentId,
-                        x: b.x * scale + offsetX,
-                        y: b.y * scale + offsetY,
-                        width: b.width * scale,
-                        height: b.height * scale,
-                        zIndex: currentId,
-                    };
-                    currentId++;
-                    return box;
-                });
-                
-                setBoxes(prev => [...prev, ...newBoxes]);
-                setNextBoxId(currentId);
-                toast({ title: "✅ AI layout detection complete!", description: `Found ${newBoxes.length} boxes.`, variant: "default" });
-            }
-
-        } catch(err) {
-            console.error("AI layout detection failed", err);
-            toast({ title: "AI layout detection failed", description: "Please try another image.", variant: "destructive" });
-        } finally {
-            setIsAiProcessing(false);
+        if (!result.boxes || result.boxes.length === 0) {
+          toast({ title: "No layout detected", description: "Couldn't find any boxes in the image.", variant: "destructive" });
+          return;
         }
+
+        const image = new Image();
+        image.src = dataUrl;
+        image.onload = () => {
+          const imgWidth = image.naturalWidth;
+          const imgHeight = image.naturalHeight;
+
+          const canvasAspectRatio = CANVAS_WIDTH / CANVAS_HEIGHT;
+          const imageAspectRatio = imgWidth / imgHeight;
+
+          let scale: number;
+          let offsetX = 0;
+          let offsetY = 0;
+
+          if (imageAspectRatio > canvasAspectRatio) {
+            // Image is wider than canvas
+            scale = CANVAS_WIDTH / imgWidth;
+            offsetY = (CANVAS_HEIGHT - imgHeight * scale) / 2;
+          } else {
+            // Image is taller than or same aspect as canvas
+            scale = CANVAS_HEIGHT / imgHeight;
+            offsetX = (CANVAS_WIDTH - imgWidth * scale) / 2;
+          }
+          
+          let currentId = nextBoxId;
+          const newBoxes = result.boxes.map((b) => {
+            const box: Box = {
+              id: currentId,
+              x: b.x * scale + offsetX,
+              y: b.y * scale + offsetY,
+              width: b.width * scale,
+              height: b.height * scale,
+              zIndex: currentId,
+            };
+            currentId++;
+            return box;
+          });
+          
+          setBoxes(prev => [...prev, ...newBoxes]);
+          setNextBoxId(currentId);
+          toast({ title: "✅ AI layout detection complete!", description: `Found ${newBoxes.length} boxes.`, variant: "default" });
+        }
+
+      } catch(err) {
+        console.error("AI layout detection failed", err);
+        toast({ title: "AI layout detection failed", description: "Please try another image.", variant: "destructive" });
+      } finally {
+        setIsAiProcessing(false);
+      }
     };
     e.target.value = "";
   };
