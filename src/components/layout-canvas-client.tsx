@@ -326,8 +326,10 @@ export function LayoutCanvasClient() {
   return (
     <div className="flex flex-col h-full bg-background text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/20 flex items-center justify-center overflow-auto">
+        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/20 overflow-auto">
+          <div className="mx-auto my-auto w-max h-max">
             <canvas ref={canvasRef} />
+          </div>
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-secondary/30">
