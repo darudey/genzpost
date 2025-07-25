@@ -320,7 +320,6 @@ export function LayoutCanvasClient() {
 
         const detectedBoxes = result.boxes;
 
-        // 1. Find the outer bounding box of all detected boxes
         const outerBoxX1 = Math.min(...detectedBoxes.map(b => b.x));
         const outerBoxY1 = Math.min(...detectedBoxes.map(b => b.y));
         const outerBoxX2 = Math.max(...detectedBoxes.map(b => b.x + b.width));
@@ -333,12 +332,10 @@ export function LayoutCanvasClient() {
           height: outerBoxY2 - outerBoxY1,
         };
 
-        // 2. Calculate scale factor to fit the outer box to the canvas
         const scaleX = canvasSize.width / outerBox.width;
         const scaleY = canvasSize.height / outerBox.height;
-        const scaleFactor = Math.min(scaleX, scaleY) * 0.9; // Use 90% of canvas for padding
+        const scaleFactor = Math.min(scaleX, scaleY) * 0.9; 
 
-        // 3. Calculate offsets to center the scaled layout
         const scaledLayoutWidth = outerBox.width * scaleFactor;
         const scaledLayoutHeight = outerBox.height * scaleFactor;
         const offsetX = (canvasSize.width - scaledLayoutWidth) / 2;
@@ -346,7 +343,6 @@ export function LayoutCanvasClient() {
           
         let currentId = nextBoxId;
         const newBoxes = detectedBoxes.map((b) => {
-          // 4. Transform each box relative to the outer box and canvas
           const box: Box = {
             id: currentId,
             x: (b.x - outerBox.x) * scaleFactor + offsetX,
@@ -465,11 +461,9 @@ export function LayoutCanvasClient() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Temporarily deselect to not draw handles on export
     const currentActiveBoxId = activeBoxId;
     setActiveBoxId(null);
     
-    // Store current transform and reset for export
     const currentScale = scale;
     const currentOffset = offset;
     setScale(1);
@@ -477,14 +471,14 @@ export function LayoutCanvasClient() {
 
 
     requestAnimationFrame(() => {
-        draw(); // redraw with no transform
+        draw(); 
         const dataUrl = canvas.toDataURL("image/png");
         const link = document.createElement("a");
         link.href = dataUrl;
         link.download = "layout-canvas.png";
         link.click();
         setActiveBoxId(currentActiveBoxId);
-        // Restore transform
+        
         setScale(currentScale);
         setOffset(currentOffset);
     });
@@ -497,7 +491,6 @@ export function LayoutCanvasClient() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Set canvas display size
     const rect = canvas.parentElement!.getBoundingClientRect();
     canvas.style.width = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
@@ -553,7 +546,7 @@ export function LayoutCanvasClient() {
 
     if(boxes.length === 0) {
         ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for this text
+        ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.fillStyle = '#a0a0a0';
         ctx.font = '24px "PT Sans"';
         ctx.textAlign = 'center';
