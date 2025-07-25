@@ -545,12 +545,15 @@ export function LayoutCanvasClient() {
     }
 
     if(boxes.length === 0) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for this text
         ctx.fillStyle = '#a0a0a0';
         ctx.font = '24px "PT Sans"';
         ctx.textAlign = 'center';
         ctx.fillText("Welcome to Layout Canvas!", canvas.width / 2, canvas.height / 2 - 20);
         ctx.font = '16px "PT Sans"';
         ctx.fillText("Upload a template image to automatically detect the layout or add a box to start.", canvas.width / 2, canvas.height / 2 + 20);
+        ctx.restore();
     }
 
     ctx.restore();
@@ -711,5 +714,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
-    
