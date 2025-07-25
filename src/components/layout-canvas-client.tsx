@@ -53,10 +53,6 @@ import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
 
 const INITIAL_CANVAS_SIZES = {
-    "1024x768": { width: 1024, height: 768 },
-    "1280x720": { width: 1280, height: 720 },
-    "1920x1080": { width: 1920, height: 1080 },
-    "800x800": { width: 800, height: 800 },
     "400x600": { width: 400, height: 600 },
 };
 
@@ -75,7 +71,7 @@ export function LayoutCanvasClient() {
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [canvasSizes, setCanvasSizes] = useState(INITIAL_CANVAS_SIZES);
-  const [currentSizeKey, setCurrentSizeKey] = useState<string>("1024x768");
+  const [currentSizeKey, setCurrentSizeKey] = useState<string>("400x600");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
@@ -234,7 +230,6 @@ export function LayoutCanvasClient() {
     const canvas = initCanvas();
     fabricCanvasRef.current = canvas;
     fitCanvasToContainer();
-    setIsSizePopoverOpen(true);
     
     window.addEventListener('resize', fitCanvasToContainer);
 
@@ -535,8 +530,8 @@ export function LayoutCanvasClient() {
   return (
     <div className="flex flex-col h-full bg-background text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center">
-            <canvas ref={canvasRef} />
+        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/80 flex items-center justify-center">
+            <canvas ref={canvasRef} className="shadow-lg" />
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-background">
@@ -724,5 +719,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
-    
