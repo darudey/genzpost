@@ -311,45 +311,50 @@ export function LayoutCanvasClient() {
           return;
         }
 
-        const image = new Image();
-        image.src = dataUrl;
-        image.onload = () => {
-          const imgWidth = image.naturalWidth;
-          const imgHeight = image.naturalHeight;
+        const detectedBoxes = result.boxes;
 
-          const canvasAspectRatio = canvasSize.width / canvasSize.height;
-          const imageAspectRatio = imgWidth / imgHeight;
+        // 1. Find the outer bounding box of all detected boxes
+        const outerBoxX1 = Math.min(...detectedBoxes.map(b => b.x));
+        const outerBoxY1 = Math.min(...detectedBoxes.map(b => b.y));
+        const outerBoxX2 = Math.max(...detectedBoxes.map(b => b.x + b.width));
+        const outerBoxY2 = Math.max(...detectedBoxes.map(b => b.y + b.height));
+        
+        const outerBox = {
+          x: outerBoxX1,
+          y: outerBoxY1,
+          width: outerBoxX2 - outerBoxX1,
+          height: outerBoxY2 - outerBoxY1,
+        };
 
-          let scaleFactor: number;
-          if (imageAspectRatio > canvasAspectRatio) {
-            scaleFactor = canvasSize.width / imgWidth;
-          } else {
-            scaleFactor = canvasSize.height / imgHeight;
-          }
+        // 2. Calculate scale factor to fit the outer box to the canvas
+        const scaleX = canvasSize.width / outerBox.width;
+        const scaleY = canvasSize.height / outerBox.height;
+        const scaleFactor = Math.min(scaleX, scaleY) * 0.9; // Use 90% of canvas for padding
 
-          const scaledWidth = imgWidth * scaleFactor;
-          const scaledHeight = imgHeight * scaleFactor;
-          const offsetX = (canvasSize.width - scaledWidth) / 2;
-          const offsetY = (canvasSize.height - scaledHeight) / 2;
+        // 3. Calculate offsets to center the scaled layout
+        const scaledLayoutWidth = outerBox.width * scaleFactor;
+        const scaledLayoutHeight = outerBox.height * scaleFactor;
+        const offsetX = (canvasSize.width - scaledLayoutWidth) / 2;
+        const offsetY = (canvasSize.height - scaledLayoutHeight) / 2;
           
-          let currentId = nextBoxId;
-          const newBoxes = result.boxes.map((b) => {
-            const box: Box = {
-              id: currentId,
-              x: b.x * scaleFactor + offsetX,
-              y: b.y * scaleFactor + offsetY,
-              width: b.width * scaleFactor,
-              height: b.height * scaleFactor,
-              zIndex: currentId,
-            };
-            currentId++;
-            return box;
-          });
-          
-          setBoxes(prev => [...prev, ...newBoxes]);
-          setNextBoxId(currentId);
-          toast({ title: "✅ AI layout detection complete!", description: `Found ${newBoxes.length} boxes.`, variant: "default" });
-        }
+        let currentId = nextBoxId;
+        const newBoxes = detectedBoxes.map((b) => {
+          // 4. Transform each box relative to the outer box and canvas
+          const box: Box = {
+            id: currentId,
+            x: (b.x - outerBox.x) * scaleFactor + offsetX,
+            y: (b.y - outerBox.y) * scaleFactor + offsetY,
+            width: b.width * scaleFactor,
+            height: b.height * scaleFactor,
+            zIndex: currentId,
+          };
+          currentId++;
+          return box;
+        });
+        
+        setBoxes(prev => [...prev, ...newBoxes]);
+        setNextBoxId(currentId);
+        toast({ title: "✅ AI layout detection complete!", description: `Found ${newBoxes.length} boxes.`, variant: "default" });
 
       } catch(err) {
         console.error("AI layout detection failed", err);
@@ -706,3 +711,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
