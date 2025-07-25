@@ -274,7 +274,7 @@ export function LayoutCanvasClient() {
     });
 
     return canvas;
-  }, [isCropMode, canvasSize.height, canvasSize.width]);
+  }, [isCropMode, canvasSize.height, canvasSize.width, canvasBgColor]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -307,6 +307,11 @@ export function LayoutCanvasClient() {
     if (!fabricCanvasRef.current) {
         const canvas = initCanvas();
         fabricCanvasRef.current = canvas;
+    } else {
+        const canvas = fabricCanvasRef.current;
+        canvas.setDimensions({ width: canvasSize.width, height: canvasSize.height });
+        canvas.backgroundColor = canvasBgColor;
+        canvas.renderAll();
     }
     fitCanvasToContainer();
     
@@ -315,23 +320,7 @@ export function LayoutCanvasClient() {
     return () => {
       window.removeEventListener('resize', fitCanvasToContainer);
     }
-  }, [initCanvas, fitCanvasToContainer]);
-  
-  useEffect(() => {
-    const canvas = fabricCanvasRef.current;
-    if (canvas) {
-      canvas.setDimensions({ width: canvasSize.width, height: canvasSize.height });
-      fitCanvasToContainer();
-    }
-  }, [canvasSize, fitCanvasToContainer]);
-
-  useEffect(() => {
-    const canvas = fabricCanvasRef.current;
-    if(canvas) {
-        canvas.backgroundColor = canvasBgColor;
-        canvas.renderAll();
-    }
-  }, [canvasBgColor]);
+  }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
 
   const enterCropMode = (target: fabric.Rect) => {
     const canvas = fabricCanvasRef.current;
