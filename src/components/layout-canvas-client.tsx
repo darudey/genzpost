@@ -445,79 +445,7 @@ export function LayoutCanvasClient() {
         <h1 className="text-2xl font-headline font-bold text-primary-foreground">Layout Canvas</h1>
         <Button onClick={exportImage}><Download className="mr-2 h-4 w-4" /> Export as PNG</Button>
       </header>
-      <div className="flex flex-1 overflow-hidden">
-        <TooltipProvider>
-          <aside className="w-16 p-2 border-r flex flex-col items-center space-y-2 bg-secondary/30">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant={mode === 'select' ? 'secondary' : 'ghost'} size="icon" onClick={() => setMode('select')}>
-                  <MousePointer />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right"><p>Select / Move (V)</p></TooltipContent>
-            </Tooltip>
-            
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
-                        {isAiProcessing ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right"><p>Detect Layout from Image</p></TooltipContent>
-            </Tooltip>
-            <input ref={templateInputRef} type="file" className="hidden" accept="image/*" onChange={handleTemplateFileChange} />
-
-            <div className="flex-grow" />
-
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()}>
-                        <Palette />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right"><p>Canvas Background</p></TooltipContent>
-            </Tooltip>
-            <input ref={colorInputRef} type="color" className="hidden" value={canvasBgColor} onChange={(e) => setCanvasBgColor(e.target.value)} />
-            
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox || isAiProcessing} onClick={() => imageInputRef.current?.click()}>
-                        {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right"><p>Upload Image to Box</p></TooltipContent>
-            </Tooltip>
-            <input ref={imageInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
-
-             <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('front')}>
-                        <BringToFront />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right"><p>Bring to Front</p></TooltipContent>
-            </Tooltip>
-
-             <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('back')}>
-                        <SendToBack />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right"><p>Send to Back</p></TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={deleteActiveBox}>
-                        <Trash2 />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right"><p>Delete Box</p></TooltipContent>
-            </Tooltip>
-
-          </aside>
-        </TooltipProvider>
+      <div className="flex flex-col flex-1 overflow-hidden">
         <main 
             className={cn("flex-1 p-4 bg-muted/20 flex items-center justify-center overflow-auto", {
                 'cursor-default': mode === 'select'
@@ -534,6 +462,78 @@ export function LayoutCanvasClient() {
             </CardContent>
           </Card>
         </main>
+        <TooltipProvider>
+          <aside className="p-2 border-t flex justify-center items-center space-x-2 bg-secondary/30">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant={mode === 'select' ? 'secondary' : 'ghost'} size="icon" onClick={() => setMode('select')}>
+                  <MousePointer />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top"><p>Select / Move (V)</p></TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
+                        {isAiProcessing ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Detect Layout from Image</p></TooltipContent>
+            </Tooltip>
+            <input ref={templateInputRef} type="file" className="hidden" accept="image/*" onChange={handleTemplateFileChange} />
+
+            <div className="flex-grow" />
+
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()}>
+                        <Palette />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Canvas Background</p></TooltipContent>
+            </Tooltip>
+            <input ref={colorInputRef} type="color" className="hidden" value={canvasBgColor} onChange={(e) => setCanvasBgColor(e.target.value)} />
+            
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={!activeBox || isAiProcessing} onClick={() => imageInputRef.current?.click()}>
+                        {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Upload Image to Box</p></TooltipContent>
+            </Tooltip>
+            <input ref={imageInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+
+             <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('front')}>
+                        <BringToFront />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Bring to Front</p></TooltipContent>
+            </Tooltip>
+
+             <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('back')}>
+                        <SendToBack />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Send to Back</p></TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={deleteActiveBox}>
+                        <Trash2 />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Delete Box</p></TooltipContent>
+            </Tooltip>
+
+          </aside>
+        </TooltipProvider>
       </div>
     </div>
   );
