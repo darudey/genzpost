@@ -93,17 +93,19 @@ export function LayoutCanvasClient() {
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [loadedImages, setLoadedImages] = useState<{[src: string]: HTMLImageElement}>({});
   const [canvasSize, setCanvasSize] = useState(CANVAS_SIZES["1024x768"]);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
 
-  const getCanvasCoordinates = (event: React.MouseEvent<HTMLElement>): { x: number; y: number } => {
+
+  const getCanvasCoordinates = (event: React.MouseEvent<HTMLElement> | MouseEvent | WheelEvent): { x: number; y: number } => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return {
-      x: (event.clientX - rect.left) * scaleX,
-      y: (event.clientY - rect.top) * scaleY,
-    };
+    const x = (event.clientX - rect.left - offset.x) / scale;
+    const y = (event.clientY - rect.top - offset.y) / scale;
+    return { x, y };
   };
 
   const getBoxAt = (x: number, y: number): Box | null => {
@@ -112,7 +114,7 @@ export function LayoutCanvasClient() {
   };
   
   const getResizeHandle = (x: number, y: number, box: Box): DragAction => {
-      const handleSize = RESIZE_HANDLE_SIZE * 2;
+      const handleSize = (RESIZE_HANDLE_SIZE * 2) / scale;
       const atTop = y >= box.y && y <= box.y + handleSize;
       const atBottom = y >= box.y + box.height - handleSize && y <= box.y + box.height;
       const atLeft = x >= box.x && x <= box.x + handleSize;
@@ -131,8 +133,13 @@ export function LayoutCanvasClient() {
 
   const handleMouseDown = (e: React.MouseEvent<HTMLElement>) => {
     const { x, y } = getCanvasCoordinates(e);
-    setStartPoint({ x, y });
+    setStartPoint({ x: e.clientX, y: e.clientY });
 
+    if (isSpacePressed) {
+      setIsPanning(true);
+      return;
+    }
+    
     if (mode === "select") {
         const clickedBox = getBoxAt(x, y);
         setActiveBoxId(clickedBox?.id || null);
@@ -164,6 +171,16 @@ export function LayoutCanvasClient() {
 
   const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     if (!startPoint) return;
+    
+    if (isPanning) {
+        setOffset(prev => ({
+            x: prev.x + (e.clientX - startPoint.x),
+            y: prev.y + (e.clientY - startPoint.y)
+        }));
+        setStartPoint({x: e.clientX, y: e.clientY});
+        return;
+    }
+
     const { x, y } = getCanvasCoordinates(e);
 
     if (isDragging && activeBoxId !== null && dragOffset) {
@@ -238,27 +255,44 @@ export function LayoutCanvasClient() {
     setIsDragging(null);
     setStartPoint(null);
     setDragOffset(null);
+    setIsPanning(false);
   };
 
   const handleMouseWheel = (e: React.WheelEvent<HTMLElement>) => {
-    if (mode !== 'select' || !activeBoxId) return;
-    const activeBox = boxes.find(b => b.id === activeBoxId);
-    if (!activeBox?.image) return;
-
     e.preventDefault();
     const scaleAmount = -e.deltaY * 0.001;
-    
-    setBoxes(prev => prev.map(box => {
-        if (box.id !== activeBoxId || !box.image) return box;
+    const { x, y } = getCanvasCoordinates(e);
 
-        const newScale = Math.max(0.01, box.image.scale + scaleAmount);
-        
-        return {
-            ...box,
-            image: { ...box.image, scale: newScale }
-        }
-    }));
+    const newScale = Math.max(0.1, Math.min(10, scale + scaleAmount));
+
+    const newOffsetX = offset.x + (x * (scale - newScale));
+    const newOffsetY = offset.y + (y * (scale - newScale));
+    
+    setScale(newScale);
+    setOffset({x: newOffsetX, y: newOffsetY});
   }
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if(e.code === 'Space') {
+            e.preventDefault();
+            setIsSpacePressed(true);
+        }
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+        if(e.code === 'Space') {
+            e.preventDefault();
+            setIsSpacePressed(false);
+            setIsPanning(false);
+        }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+    }
+  }, []);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -360,10 +394,10 @@ export function LayoutCanvasClient() {
             finalImg.src = finalDataUrl;
             finalImg.onload = () => {
                 setLoadedImages(prev => ({ ...prev, [finalDataUrl]: finalImg }));
-                const scale = Math.max(activeBox.width / finalImg.width, activeBox.height / finalImg.height);
+                const imgScale = Math.max(activeBox.width / finalImg.width, activeBox.height / finalImg.height);
                 setBoxes(prev => prev.map(box =>
                     box.id === activeBoxId
-                        ? { ...box, image: { instance: finalImg, x: 0, y: 0, scale, isFilling: needsFill } }
+                        ? { ...box, image: { instance: finalImg, x: 0, y: 0, scale: imgScale, isFilling: needsFill } }
                         : box
                 ));
                 setIsAiProcessing(false);
@@ -423,13 +457,24 @@ export function LayoutCanvasClient() {
     const currentActiveBoxId = activeBoxId;
     setActiveBoxId(null);
     
+    // Store current transform and reset for export
+    const currentScale = scale;
+    const currentOffset = offset;
+    setScale(1);
+    setOffset({x:0, y:0});
+
+
     requestAnimationFrame(() => {
+        draw(); // redraw with no transform
         const dataUrl = canvas.toDataURL("image/png");
         const link = document.createElement("a");
         link.href = dataUrl;
         link.download = "layout-canvas.png";
         link.click();
         setActiveBoxId(currentActiveBoxId);
+        // Restore transform
+        setScale(currentScale);
+        setOffset(currentOffset);
     });
 
   };
@@ -440,15 +485,24 @@ export function LayoutCanvasClient() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Set canvas display size
+    const rect = canvas.parentElement!.getBoundingClientRect();
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+
+    ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = canvasBgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.translate(offset.x, offset.y);
+    ctx.scale(scale, scale);
 
     const sortedBoxes = [...boxes].sort((a, b) => a.zIndex - b.zIndex);
     
     sortedBoxes.forEach(box => {
       ctx.strokeStyle = box.id === activeBoxId ? "#D8BFD8" : "#ccc";
-      ctx.lineWidth = box.id === activeBoxId ? 3 : 1;
+      ctx.lineWidth = box.id === activeBoxId ? 3 / scale : 1 / scale;
       ctx.strokeRect(box.x, box.y, box.width, box.height);
 
       if (box.image) {
@@ -472,6 +526,7 @@ export function LayoutCanvasClient() {
         const box = boxes.find(b => b.id === activeBoxId);
         if (box) {
             ctx.fillStyle = "#D8BFD8";
+            const handleSize = RESIZE_HANDLE_SIZE / scale;
             const handles = [
                 {x: box.x, y: box.y}, {x: box.x + box.width, y: box.y},
                 {x: box.x, y: box.y + box.height}, {x: box.x + box.width, y: box.y + box.height},
@@ -479,7 +534,7 @@ export function LayoutCanvasClient() {
                 {x: box.x, y: box.y + box.height/2}, {x: box.x + box.width, y: box.y + box.height/2},
             ];
             handles.forEach(h => {
-                ctx.fillRect(h.x - RESIZE_HANDLE_SIZE/2, h.y - RESIZE_HANDLE_SIZE/2, RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+                ctx.fillRect(h.x - handleSize/2, h.y - handleSize/2, handleSize, handleSize);
             })
         }
     }
@@ -493,7 +548,8 @@ export function LayoutCanvasClient() {
         ctx.fillText("Upload a template image to automatically detect the layout or add a box to start.", canvas.width / 2, canvas.height / 2 + 20);
     }
 
-  }, [boxes, canvasBgColor, activeBoxId, mode]);
+    ctx.restore();
+  }, [boxes, canvasBgColor, activeBoxId, mode, scale, offset]);
   
   useEffect(() => {
     draw();
@@ -506,7 +562,9 @@ export function LayoutCanvasClient() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <main 
             className={cn("flex-1 p-4 bg-muted/20 flex items-center justify-center overflow-auto", {
-                'cursor-default': mode === 'select'
+                'cursor-grab': isSpacePressed,
+                'cursor-grabbing': isPanning,
+                'cursor-default': !isSpacePressed && !isPanning,
             })}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -514,8 +572,8 @@ export function LayoutCanvasClient() {
             onMouseLeave={handleMouseUp}
             onWheel={handleMouseWheel}
         >
-          <Card className="shadow-lg overflow-hidden shrink-0">
-            <CardContent className="p-0">
+          <Card className="shadow-lg overflow-hidden shrink-0 w-full h-full">
+            <CardContent className="p-0 h-full">
               <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} />
             </CardContent>
           </Card>
