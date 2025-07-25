@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -39,7 +40,6 @@ import {
 import { autoBackgroundFill } from "@/ai/flows/auto-background-fill";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 
 const CANVAS_SIZES = {
@@ -127,6 +127,13 @@ export function LayoutCanvasClient() {
   useEffect(() => {
     initCanvas();
   }, [initCanvas]);
+
+  useEffect(() => {
+    if(fabricCanvasRef.current) {
+        fabricCanvasRef.current.setDimensions({width: canvasSize.width, height: canvasSize.height});
+        fabricCanvasRef.current.renderAll();
+    }
+  }, [canvasSize]);
 
   useEffect(() => {
     if(fabricCanvasRef.current) {
@@ -326,8 +333,8 @@ export function LayoutCanvasClient() {
   return (
     <div className="flex flex-col h-full bg-background text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/20 overflow-auto">
-          <div className="mx-auto my-auto w-max h-max">
+        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/20 overflow-auto flex items-center justify-center">
+          <div className="w-max h-max">
             <canvas ref={canvasRef} />
           </div>
         </main>
