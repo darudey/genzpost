@@ -125,7 +125,6 @@ export function LayoutCanvasClient() {
     let lastPosX: number, lastPosY: number;
     let isDragging: boolean;
     
-    // Double tap/click detection
     let lastTapTime = 0;
     let lastTapTarget: fabric.Object | undefined;
 
@@ -137,9 +136,8 @@ export function LayoutCanvasClient() {
       const timeSinceLastTap = now - lastTapTime;
 
       if (target && target.type === 'rect' && timeSinceLastTap < 500 && lastTapTarget === target) {
-        // Double tap/click
         enterCropMode(target as fabric.Rect);
-        lastTapTime = 0; // Reset tap time
+        lastTapTime = 0; 
         return;
       }
       lastTapTime = now;
@@ -194,11 +192,6 @@ export function LayoutCanvasClient() {
         if(!isCropMode) this.setViewportTransform(this.viewportTransform);
         isDragging = false;
         this.selection = true;
-      }
-      // Single click deselect logic handled here, double click handled in mousedown
-      if (opt.target === null && opt.button === 1) {
-          this.discardActiveObject();
-          this.renderAll();
       }
     });
 
@@ -281,7 +274,7 @@ export function LayoutCanvasClient() {
     });
 
     return canvas;
-  }, [isCropMode]);
+  }, [isCropMode, canvasSize.height, canvasSize.width]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -311,18 +304,16 @@ export function LayoutCanvasClient() {
 
 
   useEffect(() => {
-    const canvas = initCanvas();
-    fabricCanvasRef.current = canvas;
+    if (!fabricCanvasRef.current) {
+        const canvas = initCanvas();
+        fabricCanvasRef.current = canvas;
+    }
     fitCanvasToContainer();
     
     window.addEventListener('resize', fitCanvasToContainer);
 
     return () => {
       window.removeEventListener('resize', fitCanvasToContainer);
-      if(fabricCanvasRef.current) {
-        fabricCanvasRef.current.dispose();
-        fabricCanvasRef.current = null;
-      }
     }
   }, [initCanvas, fitCanvasToContainer]);
   
@@ -429,28 +420,28 @@ export function LayoutCanvasClient() {
           const placeholderHeight = Math.round(b.height * scaleFactor);
           
           fabric.Image.fromURL(`https://picsum.photos/${placeholderWidth}/${placeholderHeight}?grayscale&blur=2`, (img) => {
-            if (img.getElement() === null) {
-                console.error("Failed to load placeholder image");
-                return;
-            }
-            const rect = new fabric.Rect({
-              left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
-              top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
-              width: placeholderWidth,
-              height: placeholderHeight,
-              fill: 'transparent',
-              stroke: '#ccc',
-              strokeWidth: 2,
-              selectable: true,
-            });
-
-            rect.set('fill', new fabric.Pattern({
-              source: img.getElement() as (HTMLImageElement | HTMLCanvasElement),
-              repeat: 'no-repeat',
-            }));
-            
-            canvas.add(rect);
-            canvas.renderAll();
+              if (img.getElement() === null) {
+                  console.error("Failed to load placeholder image");
+                  return;
+              }
+              const rect = new fabric.Rect({
+                left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
+                top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
+                width: placeholderWidth,
+                height: placeholderHeight,
+                fill: 'transparent',
+                stroke: '#ccc',
+                strokeWidth: 2,
+                selectable: true,
+              });
+  
+              rect.set('fill', new fabric.Pattern({
+                source: img.getElement() as (HTMLImageElement | HTMLCanvasElement),
+                repeat: 'no-repeat',
+              }));
+              
+              canvas.add(rect);
+              canvas.renderAll();
           }, { crossOrigin: 'anonymous' });
         });
         
