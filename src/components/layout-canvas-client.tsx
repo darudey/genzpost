@@ -74,7 +74,7 @@ export function LayoutCanvasClient() {
   const [canvasSizes, setCanvasSizes] = useState(INITIAL_CANVAS_SIZES);
   const [currentSizeKey, setCurrentSizeKey] = useState<string>("400x600");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
-  const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
+  const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(true);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
   const [newSize, setNewSize] = useState({ width: "", height: "" });
   const [isCropMode, setIsCropMode] = useState(false);
@@ -124,13 +124,30 @@ export function LayoutCanvasClient() {
 
     let lastPosX: number, lastPosY: number;
     let isDragging: boolean;
-    let touchStartPos: { x: number; y: number } | null = null;
     
+    // Double tap/click detection
+    let lastTapTime = 0;
+    let lastTapTarget: fabric.Object | undefined;
+
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
+      const target = opt.target;
+      
+      const now = new Date().getTime();
+      const timeSinceLastTap = now - lastTapTime;
+
+      if (target && target.type === 'rect' && timeSinceLastTap < 500 && lastTapTarget === target) {
+        // Double tap/click
+        enterCropMode(target as fabric.Rect);
+        lastTapTime = 0; // Reset tap time
+        return;
+      }
+      lastTapTime = now;
+      lastTapTarget = target;
+      
       if (isCropMode) {
-        const target = canvas.getActiveObject();
-        if (target) {
+        const activeTarget = canvas.getActiveObject();
+        if (activeTarget) {
             isDragging = true;
             this.selection = false;
             lastPosX = evt.clientX;
@@ -142,7 +159,6 @@ export function LayoutCanvasClient() {
         lastPosX = evt.clientX;
         lastPosY = evt.clientY;
       }
-      touchStartPos = { x: evt.clientX, y: evt.clientY };
     });
     
     canvas.on('mouse:move', function(opt) {
@@ -179,30 +195,13 @@ export function LayoutCanvasClient() {
         isDragging = false;
         this.selection = true;
       }
-       if (touchStartPos && !isCropMode) {
-        const touchEndPos = opt.e;
-        const distance = Math.sqrt(
-            Math.pow(touchEndPos.clientX - touchStartPos.x, 2) +
-            Math.pow(touchEndPos.clientY - touchStartPos.y, 2)
-        );
-
-        if (distance < 10) { 
-            const target = canvas.findTarget(opt.e, false);
-            if (!target) {
-                canvas.discardActiveObject();
-            }
-            canvas.renderAll();
-        }
+      // Single click deselect logic handled here, double click handled in mousedown
+      if (opt.target === null && opt.button === 1) {
+          this.discardActiveObject();
+          this.renderAll();
       }
-      touchStartPos = null;
     });
 
-    canvas.on('mouse:dblclick', (opt) => {
-        const target = opt.target;
-        if (target && target.type === 'rect') {
-            enterCropMode(target as fabric.Rect);
-        }
-    });
 
     canvas.on('touch:gesture', function(opt: any) {
         if (opt.e.touches && opt.e.touches.length == 2) {
@@ -249,9 +248,6 @@ export function LayoutCanvasClient() {
                 this.selection = false;
                 lastPosX = e.touches[0].clientX;
                 lastPosY = e.touches[0].clientY;
-                if (!touchStartPos) { 
-                    touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                }
             } else {
               if(isCropMode) {
                 const target = canvas.getActiveObject();
@@ -277,6 +273,11 @@ export function LayoutCanvasClient() {
               }
             }
         }
+    });
+    
+    canvas.on('mouse:up', function(opt) {
+        isDragging = false;
+        this.selection = true;
     });
 
     return canvas;
@@ -426,30 +427,30 @@ export function LayoutCanvasClient() {
         detectedBoxes.forEach((b) => {
           const placeholderWidth = Math.round(b.width * scaleFactor);
           const placeholderHeight = Math.round(b.height * scaleFactor);
-
+          
           fabric.Image.fromURL(`https://picsum.photos/${placeholderWidth}/${placeholderHeight}?grayscale&blur=2`, (img) => {
-              if (img.getElement() === null) {
-                  console.error("Failed to load placeholder image");
-                  return;
-              }
-              const rect = new fabric.Rect({
-                left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
-                top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
-                width: placeholderWidth,
-                height: placeholderHeight,
-                fill: 'transparent',
-                stroke: '#ccc',
-                strokeWidth: 2,
-                selectable: true,
-              });
+            if (img.getElement() === null) {
+                console.error("Failed to load placeholder image");
+                return;
+            }
+            const rect = new fabric.Rect({
+              left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
+              top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
+              width: placeholderWidth,
+              height: placeholderHeight,
+              fill: 'transparent',
+              stroke: '#ccc',
+              strokeWidth: 2,
+              selectable: true,
+            });
 
-              rect.set('fill', new fabric.Pattern({
-                source: img.getElement(),
-                repeat: 'no-repeat',
-              }));
-              
-              canvas.add(rect);
-              canvas.renderAll();
+            rect.set('fill', new fabric.Pattern({
+              source: img.getElement() as (HTMLImageElement | HTMLCanvasElement),
+              repeat: 'no-repeat',
+            }));
+            
+            canvas.add(rect);
+            canvas.renderAll();
           }, { crossOrigin: 'anonymous' });
         });
         
@@ -507,7 +508,7 @@ export function LayoutCanvasClient() {
                 const scale = Math.max(box.width! / fabricImg.width!, box.height! / fabricImg.height!);
                 
                 box.set('fill', new fabric.Pattern({
-                  source: fabricImg.getElement(),
+                  source: fabricImg.getElement() as (HTMLImageElement | HTMLCanvasElement),
                   repeat: 'no-repeat',
                 }));
 
@@ -550,7 +551,7 @@ export function LayoutCanvasClient() {
         });
 
         rect.set('fill', new fabric.Pattern({
-            source: img.getElement(),
+            source: img.getElement() as (HTMLImageElement | HTMLCanvasElement),
             repeat: 'no-repeat',
         }));
         
