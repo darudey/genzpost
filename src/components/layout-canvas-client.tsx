@@ -91,18 +91,20 @@ export function LayoutCanvasClient() {
     });
     fabricCanvasRef.current = canvas;
     
+    // --- CROP MODE: Mouse Wheel Zoom ---
     canvas.on('mouse:wheel', function(opt) {
       if (isCropMode) {
         const target = canvas.getActiveObject();
         if (!target || target.type !== 'rect') return;
         const pattern = (target as fabric.Rect).fill as fabric.Pattern;
         if (!pattern) return;
+        
         const e = opt.e;
         e.preventDefault();
         e.stopPropagation();
         
         const delta = e.deltaY;
-        let zoom = pattern.get('scaleX') || 1;
+        let zoom = pattern.scaleX || 1;
         zoom *= 0.999 ** delta;
         if (zoom < 0.1) zoom = 0.1;
         if (zoom > 10) zoom = 10;
@@ -110,7 +112,7 @@ export function LayoutCanvasClient() {
         pattern.scaleX = zoom;
         pattern.scaleY = zoom;
         canvas.requestRenderAll();
-      } else {
+      } else { // --- CANVAS ZOOM ---
         const delta = opt.e.deltaY;
         let zoom = canvas.getZoom();
         zoom *= 0.999 ** delta;
@@ -122,43 +124,42 @@ export function LayoutCanvasClient() {
       }
     });
 
+    let isDragging = false;
     let lastPosX: number, lastPosY: number;
-    let isDragging: boolean;
     
     let lastTapTime = 0;
     let lastTapTarget: fabric.Object | undefined;
 
+    // --- MOUSE DOWN: Pan Start / Double Click ---
     canvas.on('mouse:down', function(opt) {
-      const evt = opt.e;
-      const target = opt.target;
-      
-      const now = new Date().getTime();
-      const timeSinceLastTap = now - lastTapTime;
+        const evt = opt.e;
+        const target = opt.target;
+        
+        const now = new Date().getTime();
+        const timeSinceLastTap = now - lastTapTime;
 
-      if (target && target.type === 'rect' && timeSinceLastTap < 500 && lastTapTarget === target) {
-        enterCropMode(target as fabric.Rect);
-        lastTapTime = 0; 
-        return;
-      }
-      lastTapTime = now;
-      lastTapTarget = target;
-      
-      if (isCropMode) {
-        const activeTarget = canvas.getActiveObject();
-        if (activeTarget) {
+        if (target && target.type === 'rect' && timeSinceLastTap < 500 && lastTapTarget === target) {
+          enterCropMode(target as fabric.Rect);
+          lastTapTime = 0;
+          return;
+        }
+        lastTapTime = now;
+        lastTapTarget = target;
+        
+        if (isCropMode && opt.target) {
+            isDragging = true;
+            this.selection = false;
+            lastPosX = evt.clientX;
+            lastPosY = evt.clientY;
+        } else if (evt.altKey === true) {
             isDragging = true;
             this.selection = false;
             lastPosX = evt.clientX;
             lastPosY = evt.clientY;
         }
-      } else if (evt.altKey === true) {
-        isDragging = true;
-        this.selection = false;
-        lastPosX = evt.clientX;
-        lastPosY = evt.clientY;
-      }
     });
     
+    // --- MOUSE MOVE: Panning ---
     canvas.on('mouse:move', function(opt) {
       if (isDragging) {
         const e = opt.e;
@@ -169,6 +170,7 @@ export function LayoutCanvasClient() {
             if (pattern) {
                 pattern.offsetX! += (e.clientX - lastPosX);
                 pattern.offsetY! += (e.clientY - lastPosY);
+                target.setCoords();
                 this.requestRenderAll();
                 lastPosX = e.clientX;
                 lastPosY = e.clientY;
@@ -187,15 +189,17 @@ export function LayoutCanvasClient() {
       }
     });
 
+    // --- MOUSE UP: Pan End ---
     canvas.on('mouse:up', function(opt) {
       if (isDragging) {
-        if(!isCropMode) this.setViewportTransform(this.viewportTransform);
+        if(!isCropMode) this.setViewportTransform(this.viewportTransform!);
         isDragging = false;
         this.selection = true;
       }
     });
 
 
+    // --- CROP MODE: Touch Pinch Zoom ---
     canvas.on('touch:gesture', function(opt: any) {
         if (opt.e.touches && opt.e.touches.length == 2) {
             isDragging = false;
@@ -205,20 +209,21 @@ export function LayoutCanvasClient() {
                 const pattern = (target as fabric.Rect).fill as fabric.Pattern;
                 if (!pattern) return;
                 
+                // @ts-ignore
+                const startScale = this.cropZoomStartScale || pattern.scaleX;
                 if (opt.state == 'start') {
                     // @ts-ignore
-                    this.zoomStartScale = pattern.scaleX;
+                    this.cropZoomStartScale = pattern.scaleX;
                 }
-                // @ts-ignore
-                let scale = this.zoomStartScale * opt.scale;
+                
+                let scale = startScale * opt.scale;
                 if (scale < 0.1) scale = 0.1;
                 if (scale > 10) scale = 10;
                 
                 pattern.scaleX = scale;
                 pattern.scaleY = scale;
                 canvas.requestRenderAll();
-            } else {
-                const e = opt.e;
+            } else { // --- CANVAS ZOOM ---
                 if (opt.state == 'start') {
                     // @ts-ignore
                     this.zoomStartScale = this.getZoom();
@@ -233,27 +238,33 @@ export function LayoutCanvasClient() {
         }
     });
 
+    // --- CROP/CANVAS MODE: Touch Drag Pan ---
     canvas.on('touch:drag', function(opt: any) {
         const e = opt.e;
         if (e.touches && e.touches.length == 1) {
-            if (!isDragging) {
-                isDragging = true;
-                this.selection = false;
-                lastPosX = e.touches[0].clientX;
-                lastPosY = e.touches[0].clientY;
-            } else {
-              if(isCropMode) {
-                const target = canvas.getActiveObject();
-                if (target && target.type === 'rect') {
-                  const pattern = (target as fabric.Rect).fill as fabric.Pattern;
-                  if (pattern) {
-                      pattern.offsetX! += (e.touches[0].clientX - lastPosX);
-                      pattern.offsetY! += (e.touches[0].clientY - lastPosY);
-                      this.requestRenderAll();
-                      lastPosX = e.touches[0].clientX;
-                      lastPosY = e.touches[0].clientY;
-                  }
+            if (isCropMode) {
+              const target = this.getActiveObject();
+              if (target && target.type === 'rect') {
+                const pattern = (target as fabric.Rect).fill as fabric.Pattern;
+                if (pattern) {
+                    if (!isDragging) {
+                        isDragging = true;
+                        lastPosX = e.touches[0].clientX;
+                        lastPosY = e.touches[0].clientY;
+                    } else {
+                        pattern.offsetX! += (e.touches[0].clientX - lastPosX);
+                        pattern.offsetY! += (e.touches[0].clientY - lastPosY);
+                        this.requestRenderAll();
+                        lastPosX = e.touches[0].clientX;
+                        lastPosY = e.touches[0].clientY;
+                    }
                 }
+              }
+            } else {
+              if (!isDragging) {
+                  isDragging = true;
+                  lastPosX = e.touches[0].clientX;
+                  lastPosY = e.touches[0].clientY;
               } else {
                 const vpt = this.viewportTransform;
                 if (vpt) {
@@ -268,6 +279,7 @@ export function LayoutCanvasClient() {
         }
     });
     
+    // --- TOUCH END: Reset flags ---
     canvas.on('mouse:up', function(opt) {
         isDragging = false;
         this.selection = true;
@@ -628,10 +640,10 @@ export function LayoutCanvasClient() {
   };
   
   return (
-    <div className="flex flex-col h-full bg-muted/80 text-foreground font-body">
+    <div className="flex flex-col h-full bg-slate-200 text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
         <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center relative">
-            <canvas ref={canvasRef} className="shadow-2xl" />
+            <canvas ref={canvasRef} className="shadow-2xl" style={{boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'}} />
             {isCropMode && (
               <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
                 <Button onClick={exitCropMode} variant="secondary">
