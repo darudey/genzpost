@@ -66,9 +66,6 @@ export function LayoutCanvasClient() {
   const [canvasSize, setCanvasSize] = useState(CANVAS_SIZES["1024x768"]);
  
   const initCanvas = useCallback(() => {
-    if (fabricCanvasRef.current) {
-        fabricCanvasRef.current.dispose();
-    }
     const canvas = new fabric.Canvas(canvasRef.current, {
         width: canvasSize.width,
         height: canvasSize.height,
@@ -123,7 +120,7 @@ export function LayoutCanvasClient() {
     });
     
     return canvas;
-  }, [canvasBgColor]);
+  }, [canvasBgColor, canvasSize]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -146,6 +143,9 @@ export function LayoutCanvasClient() {
 
 
   useEffect(() => {
+    if (fabricCanvasRef.current) {
+      fabricCanvasRef.current.dispose();
+    }
     const canvas = initCanvas();
     fabricCanvasRef.current = canvas;
     fitCanvasToContainer();
@@ -156,6 +156,7 @@ export function LayoutCanvasClient() {
       window.removeEventListener('resize', fitCanvasToContainer);
       if(fabricCanvasRef.current) {
         fabricCanvasRef.current.dispose();
+        fabricCanvasRef.current = null;
       }
     }
   }, [initCanvas, fitCanvasToContainer]);
@@ -509,3 +510,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
