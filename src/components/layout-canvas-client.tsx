@@ -94,6 +94,11 @@ export function LayoutCanvasClient() {
         this.selection = false;
         this.lastPosX = evt.clientX;
         this.lastPosY = evt.clientY;
+      } else {
+        const target = canvas.findTarget(opt.e, false);
+        if (target) {
+            canvas.setActiveObject(target);
+        }
       }
     });
     
