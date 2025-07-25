@@ -142,8 +142,6 @@ export function LayoutCanvasClient() {
         }
       }
       touchStartPos = null;
-      lastPosX = undefined;
-      lastPosY = undefined;
     });
 
     // Touch gestures for mobile
@@ -291,17 +289,29 @@ export function LayoutCanvasClient() {
         const finalOffsetY = (canvasLogicalHeight - scaledLayoutHeight) / 2;
           
         detectedBoxes.forEach((b) => {
-            const rect = new fabric.Rect({
-              left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
-              top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
-              width: b.width * scaleFactor,
-              height: b.height * scaleFactor,
-              fill: 'transparent',
-              stroke: '#ccc',
-              strokeWidth: 2,
-              selectable: true,
-            });
-            canvas.add(rect);
+          const placeholderWidth = Math.round(b.width * scaleFactor);
+          const placeholderHeight = Math.round(b.height * scaleFactor);
+
+          const rect = new fabric.Rect({
+            left: (b.x - outerBox.x) * scaleFactor + finalOffsetX,
+            top: (b.y - outerBox.y) * scaleFactor + finalOffsetY,
+            width: placeholderWidth,
+            height: placeholderHeight,
+            fill: 'transparent',
+            stroke: '#ccc',
+            strokeWidth: 2,
+            selectable: true,
+          });
+
+          fabric.Image.fromURL(`https://placehold.co/${placeholderWidth}x${placeholderHeight}.png`, (img) => {
+            rect.set('fill', new fabric.Pattern({
+              source: img.getElement(),
+              repeat: 'no-repeat',
+            }));
+            canvas.renderAll();
+          }, { crossOrigin: 'anonymous' });
+
+          canvas.add(rect);
         });
         
         canvas.renderAll();
@@ -384,15 +394,27 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
+    const rectWidth = 200;
+    const rectHeight = 200;
+
     const rect = new fabric.Rect({
-      left: (canvasSize.width - 200) / 2,
-      top: (canvasSize.height - 200) / 2,
-      width: 200,
-      height: 200,
+      left: (canvasSize.width - rectWidth) / 2,
+      top: (canvasSize.height - rectHeight) / 2,
+      width: rectWidth,
+      height: rectHeight,
       fill: 'transparent',
       stroke: '#ccc',
       strokeWidth: 2,
     });
+    
+    fabric.Image.fromURL(`https://placehold.co/${rectWidth}x${rectHeight}.png`, (img) => {
+      rect.set('fill', new fabric.Pattern({
+        source: img.getElement(),
+        repeat: 'no-repeat',
+      }));
+      canvas.renderAll();
+    }, { crossOrigin: 'anonymous' });
+    
     canvas.add(rect);
     canvas.setActiveObject(rect);
     canvas.renderAll();
@@ -586,7 +608,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
-    
-
-    
