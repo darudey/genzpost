@@ -9,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
@@ -522,7 +522,7 @@ export function LayoutCanvasClient() {
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-secondary/30">
-            <ScrollArea className="w-full">
+            <ScrollArea className="w-full whitespace-nowrap">
               <div className="flex justify-center items-center space-x-2 pb-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -640,6 +640,7 @@ export function LayoutCanvasClient() {
                     <TooltipContent side="top"><p>Export as PNG</p></TooltipContent>
                 </Tooltip>
               </div>
+              <ScrollBar orientation="horizontal" />
             </ScrollArea>
           </aside>
         </TooltipProvider>
