@@ -11,6 +11,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   MousePointer,
   ImageUp,
   Palette,
@@ -21,14 +28,13 @@ import {
   BringToFront,
   LayoutTemplate,
   PlusSquare,
+  RectangleHorizontal,
 } from "lucide-react";
 import { autoBackgroundFill } from "@/ai/flows/auto-background-fill";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const CANVAS_WIDTH = 1024;
-const CANVAS_HEIGHT = 768;
 const RESIZE_HANDLE_SIZE = 8;
 
 interface ImageState {
@@ -52,6 +58,16 @@ interface Box {
 type Mode = "select";
 type DragAction = "move" | "resize-br" | "resize-bl" | "resize-tr" | "resize-tl" | "resize-t" | "resize-b" | "resize-l" | "resize-r" | "move-image" | null;
 
+const CANVAS_SIZES = {
+    "1024x768": { width: 1024, height: 768 },
+    "1280x720": { width: 1280, height: 720 },
+    "1920x1080": { width: 1920, height: 1080 },
+    "800x800": { width: 800, height: 800 },
+    "400x600": { width: 400, height: 600 },
+};
+type CanvasSizeKey = keyof typeof CANVAS_SIZES;
+
+
 export function LayoutCanvasClient() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +86,7 @@ export function LayoutCanvasClient() {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [loadedImages, setLoadedImages] = useState<{[src: string]: HTMLImageElement}>({});
+  const [canvasSize, setCanvasSize] = useState(CANVAS_SIZES["1024x768"]);
 
   const getCanvasCoordinates = (event: React.MouseEvent<HTMLElement>): { x: number; y: number } => {
     const canvas = canvasRef.current;
@@ -260,7 +277,7 @@ export function LayoutCanvasClient() {
           const imgWidth = image.naturalWidth;
           const imgHeight = image.naturalHeight;
 
-          const canvasAspectRatio = CANVAS_WIDTH / CANVAS_HEIGHT;
+          const canvasAspectRatio = canvasSize.width / canvasSize.height;
           const imageAspectRatio = imgWidth / imgHeight;
 
           let scale: number;
@@ -268,11 +285,11 @@ export function LayoutCanvasClient() {
           let offsetY = 0;
 
           if (imageAspectRatio > canvasAspectRatio) {
-            scale = CANVAS_WIDTH / imgWidth;
-            offsetY = (CANVAS_HEIGHT - imgHeight * scale) / 2;
+            scale = canvasSize.width / imgWidth;
+            offsetY = (canvasSize.height - imgHeight * scale) / 2;
           } else {
-            scale = CANVAS_HEIGHT / imgHeight;
-            offsetX = (CANVAS_WIDTH - imgWidth * scale) / 2;
+            scale = canvasSize.height / imgHeight;
+            offsetX = (canvasSize.width - imgWidth * scale) / 2;
           }
           
           let currentId = nextBoxId;
@@ -353,8 +370,8 @@ export function LayoutCanvasClient() {
   const addBox = () => {
     const newBox: Box = {
       id: nextBoxId,
-      x: (CANVAS_WIDTH - 200) / 2,
-      y: (CANVAS_HEIGHT - 200) / 2,
+      x: (canvasSize.width - 200) / 2,
+      y: (canvasSize.height - 200) / 2,
       width: 200,
       height: 200,
       zIndex: boxes.length,
@@ -474,7 +491,7 @@ export function LayoutCanvasClient() {
   
   useEffect(() => {
     draw();
-  }, [draw]);
+  }, [draw, canvasSize]);
 
   const activeBox = boxes.find(b => b.id === activeBoxId);
 
@@ -493,7 +510,7 @@ export function LayoutCanvasClient() {
         >
           <Card className="shadow-lg overflow-hidden shrink-0">
             <CardContent className="p-0">
-              <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
+              <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} />
             </CardContent>
           </Card>
         </main>
@@ -528,6 +545,23 @@ export function LayoutCanvasClient() {
             </Tooltip>
 
             <div className="flex-grow" />
+
+             <div className="flex items-center gap-2">
+                <RectangleHorizontal className="h-4 w-4 text-muted-foreground" />
+                <Select
+                    defaultValue="1024x768"
+                    onValueChange={(value: CanvasSizeKey) => setCanvasSize(CANVAS_SIZES[value])}
+                >
+                    <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Canvas size" />
+                    </SelectTrigger>
+                    <SelectContent>
+                    {Object.keys(CANVAS_SIZES).map(key => (
+                        <SelectItem key={key} value={key}>{key}</SelectItem>
+                    ))}
+                    </SelectContent>
+                </Select>
+            </div>
 
             <Tooltip>
                 <TooltipTrigger asChild>
