@@ -188,9 +188,7 @@ export function LayoutCanvasClient() {
 
         if (distance < 10) { 
             const target = canvas.findTarget(opt.e, false);
-            if (target) {
-                canvas.setActiveObject(target);
-            } else {
+            if (!target) {
                 canvas.discardActiveObject();
             }
             canvas.renderAll();
@@ -651,8 +649,8 @@ export function LayoutCanvasClient() {
   return (
     <div className="flex flex-col h-full bg-muted/80 text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/80 flex items-center justify-center relative">
-            <canvas ref={canvasRef} className="shadow-lg" />
+        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center relative">
+            <canvas ref={canvasRef} className="shadow-2xl" />
             {isCropMode && (
               <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
                 <Button onClick={exitCropMode} variant="secondary">
