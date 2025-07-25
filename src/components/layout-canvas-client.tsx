@@ -115,9 +115,11 @@ export function LayoutCanvasClient() {
     });
 
     canvas.on('mouse:up', function(opt) {
-      this.setViewportTransform(this.viewportTransform);
-      this.isDragging = false;
-      this.selection = true;
+      if (this.isDragging) {
+        this.setViewportTransform(this.viewportTransform);
+        this.isDragging = false;
+        this.selection = true;
+      }
     });
 
   }, [canvasSize, canvasBgColor]);
@@ -207,8 +209,12 @@ export function LayoutCanvasClient() {
     if (!e.target.files || e.target.files.length === 0) return;
     
     const canvas = fabricCanvasRef.current;
-    const activeObject = canvas?.getActiveObject();
-    if (!activeObject || activeObject.type !== 'rect') return;
+    if (!canvas) return;
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject || activeObject.type !== 'rect') {
+      toast({ title: "No box selected", description: "Please select a box before uploading an image.", variant: "destructive"});
+      return;
+    };
 
     const file = e.target.files[0];
     const reader = new FileReader();
@@ -240,12 +246,19 @@ export function LayoutCanvasClient() {
             fabric.Image.fromURL(finalDataUrl, (fabricImg) => {
                 const scale = Math.max(box.width! / fabricImg.width!, box.height! / fabricImg.height!);
                 
-                box.setPattern(fabricImg, (pattern) => {
-                    if (pattern.source) {
-                         pattern.source.width = fabricImg.width! * scale;
-                         pattern.source.height = fabricImg.height! * scale;
-                    }
-                });
+                box.set('fill', new fabric.Pattern({
+                  source: fabricImg.getElement(),
+                  repeat: 'no-repeat',
+                }));
+
+                // Center the image in the pattern
+                const pattern = box.fill as fabric.Pattern;
+                pattern.offsetX = (box.width! - fabricImg.width! * scale) / 2;
+                pattern.offsetY = (box.height! - fabricImg.height! * scale) / 2;
+                
+                // Scale the image in the pattern
+                fabricImg.scaleX = scale;
+                fabricImg.scaleY = scale;
 
                 canvas?.renderAll();
                 setIsAiProcessing(false);
@@ -294,6 +307,7 @@ export function LayoutCanvasClient() {
         } else {
             canvas.sendToBack(activeObject);
         }
+        canvas.discardActiveObject();
         canvas.renderAll();
     }
   }
