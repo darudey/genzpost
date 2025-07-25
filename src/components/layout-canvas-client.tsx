@@ -434,7 +434,7 @@ export function LayoutCanvasClient() {
           const placeholderWidth = Math.round(b.width * scaleFactor);
           const placeholderHeight = Math.round(b.height * scaleFactor);
           
-          fabric.Image.fromURL(`https://picsum.photos/${placeholderWidth}/${placeholderHeight}?grayscale&blur=2`, (img) => {
+          fabric.Image.fromURL(`https://placehold.co/${placeholderWidth}x${placeholderHeight}.png?text=%20`, (img) => {
               if (img.getElement() === null) {
                   console.error("Failed to load placeholder image");
                   return;
@@ -540,7 +540,7 @@ export function LayoutCanvasClient() {
     const rectWidth = 200;
     const rectHeight = 200;
     
-    fabric.Image.fromURL(`https://picsum.photos/${rectWidth}/${rectHeight}?grayscale&blur=2`, (img) => {
+    fabric.Image.fromURL(`https://placehold.co/${rectWidth}x${rectHeight}.png?text=%20`, (img) => {
         if (img.getElement() === null) {
             console.error("Failed to load placeholder image");
             return;
@@ -651,10 +651,10 @@ export function LayoutCanvasClient() {
   };
   
   return (
-    <div className="flex flex-col h-full bg-slate-200 text-foreground font-body">
+    <div className="flex flex-col h-full bg-gray-800 text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
         <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center relative">
-            <canvas ref={canvasRef} className="shadow-2xl" style={{boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'}} />
+            <canvas ref={canvasRef} className="shadow-2xl" style={{boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'}} />
             {isCropMode && (
               <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
                 <Button onClick={exitCropMode} variant="secondary">
@@ -851,4 +851,3 @@ export function LayoutCanvasClient() {
   );
 }
 
-    
