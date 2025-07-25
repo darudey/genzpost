@@ -268,11 +268,9 @@ export function LayoutCanvasClient() {
           let offsetY = 0;
 
           if (imageAspectRatio > canvasAspectRatio) {
-            // Image is wider than canvas
             scale = CANVAS_WIDTH / imgWidth;
             offsetY = (CANVAS_HEIGHT - imgHeight * scale) / 2;
           } else {
-            // Image is taller than or same aspect as canvas
             scale = CANVAS_HEIGHT / imgHeight;
             offsetX = (CANVAS_WIDTH - imgWidth * scale) / 2;
           }
