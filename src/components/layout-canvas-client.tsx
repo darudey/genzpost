@@ -89,12 +89,14 @@ export function LayoutCanvasClient() {
 
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
+      // Pan with Alt key
       if (evt.altKey === true) {
         this.isDragging = true;
         this.selection = false;
         this.lastPosX = evt.clientX;
         this.lastPosY = evt.clientY;
       } else {
+        // Direct selection of objects
         const target = canvas.findTarget(opt.e, false);
         if (target) {
             canvas.setActiveObject(target);
@@ -123,7 +125,66 @@ export function LayoutCanvasClient() {
         this.selection = true;
       }
     });
+
+    // Touch gestures for mobile
+    canvas.on('touch:gesture', function(opt: any) {
+        if (opt.e.touches && opt.e.touches.length == 2) {
+            const e = opt.e;
+            if (opt.state == 'start') {
+                // @ts-ignore
+                this.zoomStartScale = this.getZoom();
+            }
+            // @ts-ignore
+            let scale = this.zoomStartScale * opt.scale;
+            if (scale > 20) scale = 20;
+            if (scale < 0.01) scale = 0.01;
+            // @ts-ignore
+            this.zoomToPoint({ x: opt.mid.x, y: opt.mid.y }, scale);
+        }
+    });
     
+    // @ts-ignore
+    canvas.on('touch:drag', function(opt: any) {
+        const e = opt.e;
+        if (e.touches && e.touches.length == 1) {
+            // @ts-ignore
+            this.isDragging = true;
+            // @ts-ignore
+            this.selection = false;
+            const vpt = this.viewportTransform;
+            if (vpt) {
+                // @ts-ignore
+                if (!this.lastPosX || !this.lastPosY) {
+                  // @ts-ignore
+                  this.lastPosX = e.touches[0].clientX;
+                  // @ts-ignore
+                  this.lastPosY = e.touches[0].clientY;
+                  return;
+                }
+                // @ts-ignore
+                vpt[4] += e.touches[0].clientX - this.lastPosX;
+                // @ts-ignore
+                vpt[5] += e.touches[0].clientY - this.lastPosY;
+                this.requestRenderAll();
+                // @ts-ignore
+                this.lastPosX = e.touches[0].clientX;
+                // @ts-ignore
+                this.lastPosY = e.touches[0].clientY;
+            }
+        }
+    });
+    
+    canvas.on('mouse:up', function(opt) { // Also handles touch:end
+        // @ts-ignore
+        this.isDragging = false;
+        // @ts-ignore
+        this.selection = true;
+        // @ts-ignore
+        this.lastPosX = undefined;
+        // @ts-ignore
+        this.lastPosY = undefined;
+    });
+
     return canvas;
   }, [canvasBgColor, canvasSize]);
 
