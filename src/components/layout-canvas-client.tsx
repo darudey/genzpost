@@ -100,6 +100,7 @@ export function LayoutCanvasClient() {
         const target = canvas.findTarget(opt.e, false);
         if (target) {
             canvas.setActiveObject(target);
+            canvas.renderAll();
         }
       }
     });
@@ -127,8 +128,10 @@ export function LayoutCanvasClient() {
     });
 
     // Touch gestures for mobile
+    let touchStartPos: { x: number; y: number } | null = null;
     canvas.on('touch:gesture', function(opt: any) {
         if (opt.e.touches && opt.e.touches.length == 2) {
+            this.isDragging = false; // Disable panning when zooming
             const e = opt.e;
             if (opt.state == 'start') {
                 // @ts-ignore
@@ -142,43 +145,69 @@ export function LayoutCanvasClient() {
             this.zoomToPoint({ x: opt.mid.x, y: opt.mid.y }, scale);
         }
     });
-    
-    // @ts-ignore
+
     canvas.on('touch:drag', function(opt: any) {
         const e = opt.e;
         if (e.touches && e.touches.length == 1) {
             // @ts-ignore
-            this.isDragging = true;
-            // @ts-ignore
-            this.selection = false;
-            const vpt = this.viewportTransform;
-            if (vpt) {
+            if (!this.isDragging) {
                 // @ts-ignore
-                if (!this.lastPosX || !this.lastPosY) {
-                  // @ts-ignore
-                  this.lastPosX = e.touches[0].clientX;
-                  // @ts-ignore
-                  this.lastPosY = e.touches[0].clientY;
-                  return;
-                }
+                this.isDragging = true;
                 // @ts-ignore
-                vpt[4] += e.touches[0].clientX - this.lastPosX;
-                // @ts-ignore
-                vpt[5] += e.touches[0].clientY - this.lastPosY;
-                this.requestRenderAll();
+                this.selection = false;
                 // @ts-ignore
                 this.lastPosX = e.touches[0].clientX;
                 // @ts-ignore
                 this.lastPosY = e.touches[0].clientY;
+                touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else {
+                const vpt = this.viewportTransform;
+                if (vpt) {
+                    // @ts-ignore
+                    vpt[4] += e.touches[0].clientX - this.lastPosX;
+                    // @ts-ignore
+                    vpt[5] += e.touches[0].clientY - this.lastPosY;
+                    this.requestRenderAll();
+                    // @ts-ignore
+                    this.lastPosX = e.touches[0].clientX;
+                    // @ts-ignore
+                    this.lastPosY = e.touches[0].clientY;
+                }
             }
         }
     });
     
     canvas.on('mouse:up', function(opt) { // Also handles touch:end
         // @ts-ignore
-        this.isDragging = false;
-        // @ts-ignore
-        this.selection = true;
+        if (this.isDragging) {
+          // @ts-ignore
+          this.setViewportTransform(this.viewportTransform);
+          // @ts-ignore
+          this.isDragging = false;
+          // @ts-ignore
+          this.selection = true;
+        }
+        
+        // Handle tap for selection on touch
+        if (touchStartPos) {
+            const touchEndPos = (opt.e as TouchEvent).changedTouches?.[0] || { clientX: this.lastPosX, clientY: this.lastPosY };
+            const distance = Math.sqrt(
+                Math.pow(touchEndPos.clientX - touchStartPos.x, 2) +
+                Math.pow(touchEndPos.clientY - touchStartPos.y, 2)
+            );
+
+            if (distance < 10) { // It's a tap, not a drag
+                const target = canvas.findTarget(opt.e, false);
+                if (target) {
+                    canvas.setActiveObject(target);
+                    canvas.renderAll();
+                } else {
+                    canvas.discardActiveObject();
+                    canvas.renderAll();
+                }
+            }
+        }
+        touchStartPos = null;
         // @ts-ignore
         this.lastPosX = undefined;
         // @ts-ignore
@@ -203,15 +232,19 @@ export function LayoutCanvasClient() {
       canvas.setWidth(canvasSize.width * scale);
       canvas.setHeight(canvasSize.height * scale);
       canvas.setZoom(scale);
+      
+      const vpt = canvas.viewportTransform;
+      if (vpt) {
+        vpt[4] = (containerWidth - (canvasSize.width * scale)) / 2;
+        vpt[5] = (containerHeight - (canvasSize.height * scale)) / 2;
+      }
+      
       canvas.renderAll();
     }
   }, [canvasSize]);
 
 
   useEffect(() => {
-    if (fabricCanvasRef.current) {
-      fabricCanvasRef.current.dispose();
-    }
     const canvas = initCanvas();
     fabricCanvasRef.current = canvas;
     fitCanvasToContainer();
@@ -425,10 +458,12 @@ export function LayoutCanvasClient() {
     const originalZoom = canvas.getZoom();
     const originalWidth = canvas.getWidth();
     const originalHeight = canvas.getHeight();
+    const originalVpt = canvas.viewportTransform;
     
     canvas.setZoom(1);
     canvas.setWidth(canvasSize.width);
     canvas.setHeight(canvasSize.height);
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
     
     const dataUrl = canvas.toDataURL({ format: 'png', quality: 1.0 });
     const link = document.createElement("a");
@@ -439,6 +474,7 @@ export function LayoutCanvasClient() {
     // Restore original canvas state
     canvas.setWidth(originalWidth);
     canvas.setHeight(originalHeight);
+    canvas.setViewportTransform(originalVpt!);
     canvas.setZoom(originalZoom);
   };
   
