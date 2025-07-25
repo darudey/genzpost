@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const RESIZE_HANDLE_SIZE = 8;
+const CLICK_TOLERANCE = 5;
 
 interface ImageState {
   instance: HTMLImageElement;
@@ -110,7 +111,13 @@ export function LayoutCanvasClient() {
 
   const getBoxAt = (x: number, y: number): Box | null => {
     const sortedBoxes = [...boxes].sort((a, b) => b.zIndex - a.zIndex);
-    return sortedBoxes.find(box => x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height) || null;
+    const tolerance = CLICK_TOLERANCE / scale;
+    return sortedBoxes.find(box => 
+      x >= box.x - tolerance && 
+      x <= box.x + box.width + tolerance && 
+      y >= box.y - tolerance && 
+      y <= box.y + box.height + tolerance
+    ) || null;
   };
   
   const getResizeHandle = (x: number, y: number, box: Box): DragAction => {
