@@ -25,6 +25,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   MousePointer,
   ImageUp,
   Palette,
@@ -36,20 +46,21 @@ import {
   LayoutTemplate,
   PlusSquare,
   RectangleHorizontal,
+  Settings,
 } from "lucide-react";
 import { autoBackgroundFill } from "@/ai/flows/auto-background-fill";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
 
-
-const CANVAS_SIZES = {
+const INITIAL_CANVAS_SIZES = {
     "1024x768": { width: 1024, height: 768 },
     "1280x720": { width: 1280, height: 720 },
     "1920x1080": { width: 1920, height: 1080 },
     "800x800": { width: 800, height: 800 },
     "400x600": { width: 400, height: 600 },
 };
-type CanvasSizeKey = keyof typeof CANVAS_SIZES;
+
+type CanvasSizeKey = keyof typeof INITIAL_CANVAS_SIZES;
 
 
 export function LayoutCanvasClient() {
@@ -63,8 +74,14 @@ export function LayoutCanvasClient() {
 
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [canvasSize, setCanvasSize] = useState(CANVAS_SIZES["1024x768"]);
- 
+  const [canvasSizes, setCanvasSizes] = useState(INITIAL_CANVAS_SIZES);
+  const [currentSizeKey, setCurrentSizeKey] = useState<string>("1024x768");
+  const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
+  const [tempSizes, setTempSizes] = useState(canvasSizes);
+  const [newSize, setNewSize] = useState({ width: "", height: "" });
+  
+  const canvasSize = canvasSizes[currentSizeKey as CanvasSizeKey];
+
   const initCanvas = useCallback(() => {
     const canvas = new fabric.Canvas(canvasRef.current, {
         width: canvasSize.width,
@@ -75,7 +92,6 @@ export function LayoutCanvasClient() {
     });
     fabricCanvasRef.current = canvas;
     
-    // Pan and zoom
     canvas.on('mouse:wheel', function(opt) {
       const delta = opt.e.deltaY;
       let zoom = canvas.getZoom();
@@ -93,7 +109,6 @@ export function LayoutCanvasClient() {
     
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
-      // Pan with Alt key
       if (evt.altKey === true) {
         isDragging = true;
         this.selection = false;
@@ -123,7 +138,6 @@ export function LayoutCanvasClient() {
         isDragging = false;
         this.selection = true;
       }
-       // Handle tap for selection on touch and click
        if (touchStartPos) {
         const touchEndPos = opt.e;
         const distance = Math.sqrt(
@@ -131,7 +145,7 @@ export function LayoutCanvasClient() {
             Math.pow(touchEndPos.clientY - touchStartPos.y, 2)
         );
 
-        if (distance < 10) { // It's a tap/click, not a drag
+        if (distance < 10) { 
             const target = canvas.findTarget(opt.e, false);
             if (target) {
                 canvas.setActiveObject(target);
@@ -144,10 +158,9 @@ export function LayoutCanvasClient() {
       touchStartPos = null;
     });
 
-    // Touch gestures for mobile
     canvas.on('touch:gesture', function(opt: any) {
         if (opt.e.touches && opt.e.touches.length == 2) {
-            isDragging = false; // Disable panning when zooming
+            isDragging = false; 
             const e = opt.e;
             if (opt.state == 'start') {
                 // @ts-ignore
@@ -170,7 +183,7 @@ export function LayoutCanvasClient() {
                 this.selection = false;
                 lastPosX = e.touches[0].clientX;
                 lastPosY = e.touches[0].clientY;
-                if (!touchStartPos) { // Record start pos only on first touch
+                if (!touchStartPos) { 
                     touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                 }
             } else {
@@ -187,7 +200,7 @@ export function LayoutCanvasClient() {
     });
 
     return canvas;
-  }, [canvasBgColor, canvasSize]);
+  }, []);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -231,7 +244,14 @@ export function LayoutCanvasClient() {
       }
     }
   }, [initCanvas, fitCanvasToContainer]);
-
+  
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (canvas) {
+      canvas.setDimensions({ width: canvasSize.width, height: canvasSize.height });
+      fitCanvasToContainer();
+    }
+  }, [canvasSize, fitCanvasToContainer]);
 
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
@@ -275,7 +295,6 @@ export function LayoutCanvasClient() {
         const canvas = fabricCanvasRef.current;
         if (!canvas) return;
 
-        // Use the logical canvas dimensions for scaling
         const canvasLogicalWidth = canvasSize.width;
         const canvasLogicalHeight = canvasSize.height;
 
@@ -373,12 +392,10 @@ export function LayoutCanvasClient() {
                   repeat: 'no-repeat',
                 }));
 
-                // Center the image in the pattern
                 const pattern = box.fill as fabric.Pattern;
                 pattern.offsetX = (box.width! - fabricImg.width! * scale) / 2;
                 pattern.offsetY = (box.height! - fabricImg.height! * scale) / 2;
                 
-                // Scale the image in the pattern
                 fabricImg.scaleX = scale;
                 fabricImg.scaleY = scale;
 
@@ -450,7 +467,6 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
     
-    // Temporarily reset zoom to 1 for export
     const originalZoom = canvas.getZoom();
     const originalWidth = canvas.getWidth();
     const originalHeight = canvas.getHeight();
@@ -467,11 +483,44 @@ export function LayoutCanvasClient() {
     link.download = "layout-canvas.png";
     link.click();
 
-    // Restore original canvas state
     canvas.setWidth(originalWidth);
     canvas.setHeight(originalHeight);
     canvas.setViewportTransform(originalVpt!);
     canvas.setZoom(originalZoom);
+  };
+
+  const handleAddNewSize = () => {
+    const width = parseInt(newSize.width);
+    const height = parseInt(newSize.height);
+    if (width > 0 && height > 0) {
+      const key = `${width}x${height}`;
+      if (!tempSizes[key as CanvasSizeKey]) {
+        setTempSizes(prev => ({ ...prev, [key]: { width, height } }));
+        setNewSize({ width: "", height: "" });
+      } else {
+        toast({ title: "Size already exists", variant: "destructive" });
+      }
+    } else {
+      toast({ title: "Invalid dimensions", description: "Width and height must be positive numbers.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteSize = (keyToDelete: string) => {
+    if (Object.keys(tempSizes).length <= 1) {
+      toast({ title: "Cannot delete last size", description: "You must have at least one canvas size.", variant: "destructive" });
+      return;
+    }
+    const newSizes = { ...tempSizes };
+    delete newSizes[keyToDelete as CanvasSizeKey];
+    setTempSizes(newSizes);
+  };
+
+  const handleSaveSizes = () => {
+    setCanvasSizes(tempSizes);
+    if (!tempSizes[currentSizeKey as CanvasSizeKey]) {
+      setCurrentSizeKey(Object.keys(tempSizes)[0]);
+    }
+    setIsEditSizesOpen(false);
   };
   
   return (
@@ -525,20 +574,35 @@ export function LayoutCanvasClient() {
                         </TooltipTrigger>
                         <TooltipContent side="top"><p>Canvas Size</p></TooltipContent>
                     </Tooltip>
-                    <PopoverContent className="w-auto p-2">
-                         <Select
-                            defaultValue="1024x768"
-                            onValueChange={(value: CanvasSizeKey) => setCanvasSize(CANVAS_SIZES[value])}
-                        >
-                            <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="Canvas size" />
-                            </SelectTrigger>
-                            <SelectContent>
-                            {Object.keys(CANVAS_SIZES).map(key => (
-                                <SelectItem key={key} value={key}>{key}</SelectItem>
-                            ))}
-                            </SelectContent>
-                        </Select>
+                    <PopoverContent className="w-auto p-0">
+                        <div className="p-2 flex items-center gap-2">
+                            <Select
+                                value={currentSizeKey}
+                                onValueChange={(value: string) => setCurrentSizeKey(value)}
+                            >
+                                <SelectTrigger className="w-[120px]">
+                                <SelectValue placeholder="Canvas size" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                {Object.keys(canvasSizes).map(key => (
+                                    <SelectItem key={key} value={key}>{key}</SelectItem>
+                                ))}
+                                </SelectContent>
+                            </Select>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => {
+                                        setTempSizes(canvasSizes);
+                                        setIsEditSizesOpen(true);
+                                    }}>
+                                        <Settings className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Edit Sizes</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
                     </PopoverContent>
                 </Popover>
 
@@ -605,6 +669,43 @@ export function LayoutCanvasClient() {
           </aside>
         </TooltipProvider>
       </div>
+
+      <Dialog open={isEditSizesOpen} onOpenChange={setIsEditSizesOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Canvas Sizes</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-2">
+              {Object.keys(tempSizes).map(key => (
+                <div key={key} className="flex items-center gap-2">
+                  <Input readOnly value={key} className="flex-1" />
+                  <Button variant="ghost" size="icon" onClick={() => handleDeleteSize(key)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-end gap-2 border-t pt-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="width">Width</Label>
+                <Input id="width" type="number" placeholder="e.g. 1920" value={newSize.width} onChange={e => setNewSize({...newSize, width: e.target.value})} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="height">Height</Label>
+                <Input id="height" type="number" placeholder="e.g. 1080" value={newSize.height} onChange={e => setNewSize({...newSize, height: e.target.value})} />
+              </div>
+              <Button onClick={handleAddNewSize}>Add New Size</Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleSaveSizes}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
