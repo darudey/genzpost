@@ -115,11 +115,9 @@ export function LayoutCanvasClient() {
     });
 
     canvas.on('mouse:up', function(opt) {
-      if (this.isDragging) {
-        this.setViewportTransform(this.viewportTransform);
-        this.isDragging = false;
-        this.selection = true;
-      }
+      this.setViewportTransform(this.viewportTransform);
+      this.isDragging = false;
+      this.selection = true;
     });
 
   }, [canvasSize, canvasBgColor]);
@@ -129,16 +127,18 @@ export function LayoutCanvasClient() {
   }, [initCanvas]);
 
   useEffect(() => {
-    if(fabricCanvasRef.current) {
-        fabricCanvasRef.current.setDimensions({width: canvasSize.width, height: canvasSize.height});
-        fabricCanvasRef.current.renderAll();
+    const canvas = fabricCanvasRef.current;
+    if(canvas) {
+        canvas.setDimensions({width: canvasSize.width, height: canvasSize.height});
+        canvas.renderAll();
     }
   }, [canvasSize]);
 
   useEffect(() => {
-    if(fabricCanvasRef.current) {
-        fabricCanvasRef.current.backgroundColor = canvasBgColor;
-        fabricCanvasRef.current.renderAll();
+    const canvas = fabricCanvasRef.current;
+    if(canvas) {
+        canvas.backgroundColor = canvasBgColor;
+        canvas.renderAll();
     }
   }, [canvasBgColor]);
 
@@ -333,16 +333,16 @@ export function LayoutCanvasClient() {
   return (
     <div className="flex flex-col h-full bg-background text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/20 overflow-auto flex items-center justify-center">
+        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 overflow-auto flex items-center justify-center">
           <canvas ref={canvasRef} />
         </main>
         <TooltipProvider>
-          <aside className="p-2 border-t bg-secondary/30">
+          <aside className="p-2 border-t bg-background">
             <ScrollArea className="w-full whitespace-nowrap">
               <div className="flex justify-center items-center space-x-2 pb-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant='secondary' size="icon">
+                    <Button variant='ghost' size="icon">
                       <MousePointer />
                     </Button>
                   </TooltipTrigger>
