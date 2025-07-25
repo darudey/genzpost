@@ -87,51 +87,69 @@ export function LayoutCanvasClient() {
       opt.e.stopPropagation();
     });
 
+    let lastPosX: number, lastPosY: number;
+    let isDragging: boolean;
+    let touchStartPos: { x: number; y: number } | null = null;
+    
     canvas.on('mouse:down', function(opt) {
       const evt = opt.e;
       // Pan with Alt key
       if (evt.altKey === true) {
-        this.isDragging = true;
+        isDragging = true;
         this.selection = false;
-        this.lastPosX = evt.clientX;
-        this.lastPosY = evt.clientY;
-      } else {
-        // Direct selection of objects
-        const target = canvas.findTarget(opt.e, false);
-        if (target) {
-            canvas.setActiveObject(target);
-            canvas.renderAll();
-        }
+        lastPosX = evt.clientX;
+        lastPosY = evt.clientY;
       }
+      touchStartPos = { x: evt.clientX, y: evt.clientY };
     });
     
     canvas.on('mouse:move', function(opt) {
-      if (this.isDragging) {
+      if (isDragging) {
         const e = opt.e;
         const vpt = this.viewportTransform;
         if (vpt) {
-            vpt[4] += e.clientX - this.lastPosX;
-            vpt[5] += e.clientY - this.lastPosY;
+            vpt[4] += e.clientX - lastPosX;
+            vpt[5] += e.clientY - lastPosY;
             this.requestRenderAll();
-            this.lastPosX = e.clientX;
-            this.lastPosY = e.clientY;
+            lastPosX = e.clientX;
+            lastPosY = e.clientY;
         }
       }
     });
 
     canvas.on('mouse:up', function(opt) {
-      if (this.isDragging) {
+      if (isDragging) {
         this.setViewportTransform(this.viewportTransform);
-        this.isDragging = false;
+        isDragging = false;
         this.selection = true;
       }
+       // Handle tap for selection on touch and click
+       if (touchStartPos) {
+        const touchEndPos = opt.e;
+        const distance = Math.sqrt(
+            Math.pow(touchEndPos.clientX - touchStartPos.x, 2) +
+            Math.pow(touchEndPos.clientY - touchStartPos.y, 2)
+        );
+
+        if (distance < 10) { // It's a tap/click, not a drag
+            const target = canvas.findTarget(opt.e, false);
+            if (target) {
+                canvas.setActiveObject(target);
+            } else {
+                canvas.discardActiveObject();
+            }
+            canvas.renderAll();
+        }
+      }
+      touchStartPos = null;
+      lastPosX = undefined;
+      lastPosY = undefined;
     });
 
     // Touch gestures for mobile
-    let touchStartPos: { x: number; y: number } | null = null;
     canvas.on('touch:gesture', function(opt: any) {
         if (opt.e.touches && opt.e.touches.length == 2) {
-            this.isDragging = false; // Disable panning when zooming
+            isDragging = false; // Disable panning when zooming
             const e = opt.e;
             if (opt.state == 'start') {
                 // @ts-ignore
@@ -149,69 +167,25 @@ export function LayoutCanvasClient() {
     canvas.on('touch:drag', function(opt: any) {
         const e = opt.e;
         if (e.touches && e.touches.length == 1) {
-            // @ts-ignore
-            if (!this.isDragging) {
-                // @ts-ignore
-                this.isDragging = true;
-                // @ts-ignore
+            if (!isDragging) {
+                isDragging = true;
                 this.selection = false;
-                // @ts-ignore
-                this.lastPosX = e.touches[0].clientX;
-                // @ts-ignore
-                this.lastPosY = e.touches[0].clientY;
-                touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                lastPosX = e.touches[0].clientX;
+                lastPosY = e.touches[0].clientY;
+                if (!touchStartPos) { // Record start pos only on first touch
+                    touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                }
             } else {
                 const vpt = this.viewportTransform;
                 if (vpt) {
-                    // @ts-ignore
-                    vpt[4] += e.touches[0].clientX - this.lastPosX;
-                    // @ts-ignore
-                    vpt[5] += e.touches[0].clientY - this.lastPosY;
+                    vpt[4] += e.touches[0].clientX - lastPosX;
+                    vpt[5] += e.touches[0].clientY - lastPosY;
                     this.requestRenderAll();
-                    // @ts-ignore
-                    this.lastPosX = e.touches[0].clientX;
-                    // @ts-ignore
-                    this.lastPosY = e.touches[0].clientY;
+                    lastPosX = e.touches[0].clientX;
+                    lastPosY = e.touches[0].clientY;
                 }
             }
         }
-    });
-    
-    canvas.on('mouse:up', function(opt) { // Also handles touch:end
-        // @ts-ignore
-        if (this.isDragging) {
-          // @ts-ignore
-          this.setViewportTransform(this.viewportTransform);
-          // @ts-ignore
-          this.isDragging = false;
-          // @ts-ignore
-          this.selection = true;
-        }
-        
-        // Handle tap for selection on touch
-        if (touchStartPos) {
-            const touchEndPos = (opt.e as TouchEvent).changedTouches?.[0] || { clientX: this.lastPosX, clientY: this.lastPosY };
-            const distance = Math.sqrt(
-                Math.pow(touchEndPos.clientX - touchStartPos.x, 2) +
-                Math.pow(touchEndPos.clientY - touchStartPos.y, 2)
-            );
-
-            if (distance < 10) { // It's a tap, not a drag
-                const target = canvas.findTarget(opt.e, false);
-                if (target) {
-                    canvas.setActiveObject(target);
-                    canvas.renderAll();
-                } else {
-                    canvas.discardActiveObject();
-                    canvas.renderAll();
-                }
-            }
-        }
-        touchStartPos = null;
-        // @ts-ignore
-        this.lastPosX = undefined;
-        // @ts-ignore
-        this.lastPosY = undefined;
     });
 
     return canvas;
@@ -612,5 +586,7 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
 
     
