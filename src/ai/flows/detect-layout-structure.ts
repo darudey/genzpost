@@ -40,9 +40,13 @@ const prompt = ai.definePrompt({
   name: 'detectLayoutStructurePrompt',
   input: {schema: DetectLayoutStructureInputSchema},
   output: {schema: DetectLayoutStructureOutputSchema},
-  prompt: `You are an AI layout detection expert. Analyze the provided image and identify the distinct rectangular layout boxes within it.
+  prompt: `You are an AI layout detection expert. Your task is to analyze the provided image and identify the overall layout structure.
 
-Return an array of objects, where each object represents a box and has 'x', 'y', 'width', and 'height' properties.
+First, identify the main bounding box that encompasses all the layout elements.
+
+Then, identify all the individual rectangular content boxes within that main bounding box. The coordinates for these inner boxes should be relative to the top-left corner of the image. Ensure that the alignment and relative positions of these boxes are maintained as they appear in the source image.
+
+Return an array of objects, where each object represents a detected content box and has 'x', 'y', 'width', and 'height' properties.
 
 Image: {{media url=imageDataUri}}`,
 });
