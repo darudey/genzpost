@@ -115,24 +115,51 @@ export function LayoutCanvasClient() {
     });
 
     canvas.on('mouse:up', function(opt) {
-      this.setViewportTransform(this.viewportTransform);
-      this.isDragging = false;
-      this.selection = true;
+      if (this.isDragging) {
+        this.setViewportTransform(this.viewportTransform);
+        this.isDragging = false;
+        this.selection = true;
+      }
     });
+    
+    return canvas;
+  }, [canvasBgColor]);
 
-  }, [canvasSize, canvasBgColor]);
-
-  useEffect(() => {
-    initCanvas();
-  }, [initCanvas]);
-
-  useEffect(() => {
+  const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
-    if(canvas) {
-        canvas.setDimensions({width: canvasSize.width, height: canvasSize.height});
-        canvas.renderAll();
+    const container = canvasWrapperRef.current;
+
+    if (canvas && container) {
+      const containerWidth = container.offsetWidth;
+      const containerHeight = container.offsetHeight;
+
+      const scaleX = containerWidth / canvasSize.width;
+      const scaleY = containerHeight / canvasSize.height;
+      const scale = Math.min(scaleX, scaleY) * 0.9;
+
+      canvas.setWidth(canvasSize.width * scale);
+      canvas.setHeight(canvasSize.height * scale);
+      canvas.setZoom(scale);
+      canvas.renderAll();
     }
   }, [canvasSize]);
+
+
+  useEffect(() => {
+    const canvas = initCanvas();
+    fabricCanvasRef.current = canvas;
+    fitCanvasToContainer();
+    
+    window.addEventListener('resize', fitCanvasToContainer);
+
+    return () => {
+      window.removeEventListener('resize', fitCanvasToContainer);
+      if(fabricCanvasRef.current) {
+        fabricCanvasRef.current.dispose();
+      }
+    }
+  }, [initCanvas, fitCanvasToContainer]);
+
 
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
@@ -176,14 +203,18 @@ export function LayoutCanvasClient() {
         const canvas = fabricCanvasRef.current;
         if (!canvas) return;
 
-        const scaleX = canvas.width! / outerBox.width;
-        const scaleY = canvas.height! / outerBox.height;
+        // Use the logical canvas dimensions for scaling
+        const canvasLogicalWidth = canvasSize.width;
+        const canvasLogicalHeight = canvasSize.height;
+
+        const scaleX = canvasLogicalWidth / outerBox.width;
+        const scaleY = canvasLogicalHeight / outerBox.height;
         const scaleFactor = Math.min(scaleX, scaleY) * 0.9; 
 
         const scaledLayoutWidth = outerBox.width * scaleFactor;
         const scaledLayoutHeight = outerBox.height * scaleFactor;
-        const finalOffsetX = (canvas.width! - scaledLayoutWidth) / 2;
-        const finalOffsetY = (canvas.height! - scaledLayoutHeight) / 2;
+        const finalOffsetX = (canvasLogicalWidth - scaledLayoutWidth) / 2;
+        const finalOffsetY = (canvasLogicalHeight - scaledLayoutHeight) / 2;
           
         detectedBoxes.forEach((b) => {
             const rect = new fabric.Rect({
@@ -280,8 +311,8 @@ export function LayoutCanvasClient() {
     if (!canvas) return;
 
     const rect = new fabric.Rect({
-      left: (canvas.width! - 200) / 2,
-      top: (canvas.height! - 200) / 2,
+      left: (canvasSize.width - 200) / 2,
+      top: (canvasSize.height - 200) / 2,
       width: 200,
       height: 200,
       fill: 'transparent',
@@ -323,18 +354,32 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
     
+    // Temporarily reset zoom to 1 for export
+    const originalZoom = canvas.getZoom();
+    const originalWidth = canvas.getWidth();
+    const originalHeight = canvas.getHeight();
+    
+    canvas.setZoom(1);
+    canvas.setWidth(canvasSize.width);
+    canvas.setHeight(canvasSize.height);
+    
     const dataUrl = canvas.toDataURL({ format: 'png', quality: 1.0 });
     const link = document.createElement("a");
     link.href = dataUrl;
     link.download = "layout-canvas.png";
     link.click();
+
+    // Restore original canvas state
+    canvas.setWidth(originalWidth);
+    canvas.setHeight(originalHeight);
+    canvas.setZoom(originalZoom);
   };
   
   return (
     <div className="flex flex-col h-full bg-background text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 overflow-auto flex items-center justify-center">
-          <canvas ref={canvasRef} />
+        <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center">
+            <canvas ref={canvasRef} />
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-background">
