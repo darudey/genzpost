@@ -320,26 +320,26 @@ export function LayoutCanvasClient() {
           const canvasAspectRatio = canvasSize.width / canvasSize.height;
           const imageAspectRatio = imgWidth / imgHeight;
 
-          let scale: number;
+          let scaleFactor: number;
           let offsetX = 0;
           let offsetY = 0;
 
           if (imageAspectRatio > canvasAspectRatio) {
-            scale = canvasSize.width / imgWidth;
-            offsetY = (canvasSize.height - imgHeight * scale) / 2;
+            scaleFactor = canvasSize.width / imgWidth;
+            offsetY = (canvasSize.height - imgHeight * scaleFactor) / 2;
           } else {
-            scale = canvasSize.height / imgHeight;
-            offsetX = (canvasSize.width - imgWidth * scale) / 2;
+            scaleFactor = canvasSize.height / imgHeight;
+            offsetX = (canvasSize.width - imgWidth * scaleFactor) / 2;
           }
           
           let currentId = nextBoxId;
           const newBoxes = result.boxes.map((b) => {
             const box: Box = {
               id: currentId,
-              x: b.x * scale + offsetX,
-              y: b.y * scale + offsetY,
-              width: b.width * scale,
-              height: b.height * scale,
+              x: b.x * scaleFactor + offsetX,
+              y: b.y * scaleFactor + offsetY,
+              width: b.width * scaleFactor,
+              height: b.height * scaleFactor,
               zIndex: currentId,
             };
             currentId++;
