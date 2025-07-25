@@ -640,7 +640,7 @@ export function LayoutCanvasClient() {
                     <TooltipContent side="top"><p>Export as PNG</p></TooltipContent>
                 </Tooltip>
               </div>
-              <ScrollBar orientation="horizontal" />
+              <ScrollBar orientation="horizontal" className="hidden" />
             </ScrollArea>
           </aside>
         </TooltipProvider>
