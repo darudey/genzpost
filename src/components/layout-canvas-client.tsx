@@ -321,16 +321,16 @@ export function LayoutCanvasClient() {
           const imageAspectRatio = imgWidth / imgHeight;
 
           let scaleFactor: number;
-          let offsetX = 0;
-          let offsetY = 0;
-
           if (imageAspectRatio > canvasAspectRatio) {
             scaleFactor = canvasSize.width / imgWidth;
-            offsetY = (canvasSize.height - imgHeight * scaleFactor) / 2;
           } else {
             scaleFactor = canvasSize.height / imgHeight;
-            offsetX = (canvasSize.width - imgWidth * scaleFactor) / 2;
           }
+
+          const scaledWidth = imgWidth * scaleFactor;
+          const scaledHeight = imgHeight * scaleFactor;
+          const offsetX = (canvasSize.width - scaledWidth) / 2;
+          const offsetY = (canvasSize.height - scaledHeight) / 2;
           
           let currentId = nextBoxId;
           const newBoxes = result.boxes.map((b) => {
