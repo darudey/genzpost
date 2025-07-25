@@ -480,10 +480,6 @@ export function LayoutCanvasClient() {
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground font-body">
-      <header className="p-4 border-b flex justify-between items-center shadow-sm z-10">
-        <h1 className="text-2xl font-headline font-bold text-primary-foreground">Layout Canvas</h1>
-        <Button onClick={exportImage}><Download className="mr-2 h-4 w-4" /> Export as PNG</Button>
-      </header>
       <div className="flex flex-col flex-1 overflow-hidden">
         <main 
             className={cn("flex-1 p-4 bg-muted/20 flex items-center justify-center overflow-auto", {
@@ -578,6 +574,17 @@ export function LayoutCanvasClient() {
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top"><p>Delete Box</p></TooltipContent>
+            </Tooltip>
+            
+            <div className="border-l h-8 mx-2" />
+
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={exportImage}>
+                        <Download />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Export as PNG</p></TooltipContent>
             </Tooltip>
 
           </aside>
