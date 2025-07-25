@@ -5,6 +5,12 @@ import type { ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -515,112 +521,126 @@ export function LayoutCanvasClient() {
           </Card>
         </main>
         <TooltipProvider>
-          <aside className="p-2 border-t flex justify-center items-center space-x-2 bg-secondary/30">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant={mode === 'select' ? 'secondary' : 'ghost'} size="icon" onClick={() => setMode('select')}>
-                  <MousePointer />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top"><p>Select / Move (V)</p></TooltipContent>
-            </Tooltip>
-            
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
-                        {isAiProcessing ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
+          <aside className="p-2 border-t bg-secondary/30">
+            <ScrollArea className="w-full">
+              <div className="flex justify-center items-center space-x-2 pb-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant={mode === 'select' ? 'secondary' : 'ghost'} size="icon" onClick={() => setMode('select')}>
+                      <MousePointer />
                     </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Detect Layout from Image</p></TooltipContent>
-            </Tooltip>
-            <input ref={templateInputRef} type="file" className="hidden" accept="image/*" onChange={handleTemplateFileChange} />
+                  </TooltipTrigger>
+                  <TooltipContent side="top"><p>Select / Move (V)</p></TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
+                            {isAiProcessing ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Detect Layout from Image</p></TooltipContent>
+                </Tooltip>
+                <input ref={templateInputRef} type="file" className="hidden" accept="image/*" onChange={handleTemplateFileChange} />
 
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={addBox}>
-                        <PlusSquare />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Add Box</p></TooltipContent>
-            </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={addBox}>
+                            <PlusSquare />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Add Box</p></TooltipContent>
+                </Tooltip>
 
-            <div className="flex-grow" />
+                <div className="flex-grow" />
+                
+                <Popover>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <RectangleHorizontal />
+                                </Button>
+                            </PopoverTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent side="top"><p>Canvas Size</p></TooltipContent>
+                    </Tooltip>
+                    <PopoverContent className="w-auto p-2">
+                         <Select
+                            defaultValue="1024x768"
+                            onValueChange={(value: CanvasSizeKey) => setCanvasSize(CANVAS_SIZES[value])}
+                        >
+                            <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Canvas size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                            {Object.keys(CANVAS_SIZES).map(key => (
+                                <SelectItem key={key} value={key}>{key}</SelectItem>
+                            ))}
+                            </SelectContent>
+                        </Select>
+                    </PopoverContent>
+                </Popover>
 
-             <div className="flex items-center gap-2">
-                <RectangleHorizontal className="h-4 w-4 text-muted-foreground" />
-                <Select
-                    defaultValue="1024x768"
-                    onValueChange={(value: CanvasSizeKey) => setCanvasSize(CANVAS_SIZES[value])}
-                >
-                    <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Canvas size" />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {Object.keys(CANVAS_SIZES).map(key => (
-                        <SelectItem key={key} value={key}>{key}</SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
-            </div>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()}>
+                            <Palette />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Canvas Background</p></TooltipContent>
+                </Tooltip>
+                <input ref={colorInputRef} type="color" className="hidden" value={canvasBgColor} onChange={(e) => setCanvasBgColor(e.target.value)} />
+                
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" disabled={!activeBox || isAiProcessing} onClick={() => imageInputRef.current?.click()}>
+                            {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Upload Image to Box</p></TooltipContent>
+                </Tooltip>
+                <input ref={imageInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
 
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()}>
-                        <Palette />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Canvas Background</p></TooltipContent>
-            </Tooltip>
-            <input ref={colorInputRef} type="color" className="hidden" value={canvasBgColor} onChange={(e) => setCanvasBgColor(e.target.value)} />
-            
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox || isAiProcessing} onClick={() => imageInputRef.current?.click()}>
-                        {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Upload Image to Box</p></TooltipContent>
-            </Tooltip>
-            <input ref={imageInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('front')}>
+                            <BringToFront />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Bring to Front</p></TooltipContent>
+                </Tooltip>
 
-             <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('front')}>
-                        <BringToFront />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Bring to Front</p></TooltipContent>
-            </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('back')}>
+                            <SendToBack />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Send to Back</p></TooltipContent>
+                </Tooltip>
 
-             <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={() => changeZIndex('back')}>
-                        <SendToBack />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Send to Back</p></TooltipContent>
-            </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" disabled={!activeBox} onClick={deleteActiveBox}>
+                            <Trash2 />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Delete Box</p></TooltipContent>
+                </Tooltip>
+                
+                <div className="border-l h-8 mx-2" />
 
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!activeBox} onClick={deleteActiveBox}>
-                        <Trash2 />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Delete Box</p></TooltipContent>
-            </Tooltip>
-            
-            <div className="border-l h-8 mx-2" />
-
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={exportImage}>
-                        <Download />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p>Export as PNG</p></TooltipContent>
-            </Tooltip>
-
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={exportImage}>
+                            <Download />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Export as PNG</p></TooltipContent>
+                </Tooltip>
+              </div>
+            </ScrollArea>
           </aside>
         </TooltipProvider>
       </div>
