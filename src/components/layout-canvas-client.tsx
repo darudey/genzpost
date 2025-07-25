@@ -11,7 +11,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Brush,
   MousePointer,
   ImageUp,
   Palette,
@@ -20,8 +19,10 @@ import {
   Loader2,
   SendToBack,
   BringToFront,
+  LayoutTemplate,
 } from "lucide-react";
 import { autoBackgroundFill } from "@/ai/flows/auto-background-fill";
+import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -47,22 +48,22 @@ interface Box {
   zIndex: number;
 }
 
-type Mode = "draw" | "select";
+type Mode = "select";
 type DragAction = "move" | "resize-br" | "resize-bl" | "resize-tr" | "resize-tl" | "resize-t" | "resize-b" | "resize-l" | "resize-r" | "move-image" | null;
 
 export function LayoutCanvasClient() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const templateInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [nextBoxId, setNextBoxId] = useState(1);
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
-  const [mode, setMode] = useState<Mode>("draw");
+  const [mode, setMode] = useState<Mode>("select");
   const [activeBoxId, setActiveBoxId] = useState<number | null>(null);
 
-  const [isDrawing, setIsDrawing] = useState(false);
   const [isDragging, setIsDragging] = useState<DragAction>(null);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
@@ -108,12 +109,7 @@ export function LayoutCanvasClient() {
     const { x, y } = getCanvasCoordinates(e);
     setStartPoint({ x, y });
 
-    if (mode === "draw") {
-      setIsDrawing(true);
-      const newBox: Box = { id: nextBoxId, x, y, width: 0, height: 0, zIndex: boxes.length };
-      setBoxes(prev => [...prev, newBox]);
-      setActiveBoxId(newBox.id);
-    } else if (mode === "select") {
+    if (mode === "select") {
         const clickedBox = getBoxAt(x, y);
         setActiveBoxId(clickedBox?.id || null);
         
@@ -146,13 +142,7 @@ export function LayoutCanvasClient() {
     if (!startPoint) return;
     const { x, y } = getCanvasCoordinates(e);
 
-    if (isDrawing && mode === "draw") {
-      setBoxes(prev => prev.map(box =>
-        box.id === nextBoxId
-          ? { ...box, width: x - startPoint.x, height: y - startPoint.y }
-          : box
-      ));
-    } else if (isDragging && activeBoxId !== null && dragOffset) {
+    if (isDragging && activeBoxId !== null && dragOffset) {
       setBoxes(prev => prev.map(box => {
         if (box.id !== activeBoxId) return box;
         
@@ -221,10 +211,6 @@ export function LayoutCanvasClient() {
   };
 
   const handleMouseUp = () => {
-    if (isDrawing) {
-      setNextBoxId(prev => prev + 1);
-    }
-    setIsDrawing(false);
     setIsDragging(null);
     setStartPoint(null);
     setDragOffset(null);
@@ -249,6 +235,49 @@ export function LayoutCanvasClient() {
         }
     }));
   }
+
+  const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        setIsAiProcessing(true);
+        try {
+            toast({ title: "🤖 AI is detecting layout...", description: "This might take a moment." });
+            const result = await detectLayoutStructure({ imageDataUri: dataUrl });
+
+            const image = new Image();
+            image.src = dataUrl;
+            image.onload = () => {
+                const scaleX = CANVAS_WIDTH / image.width;
+                const scaleY = CANVAS_HEIGHT / image.height;
+                const scale = Math.min(scaleX, scaleY);
+                
+                const newBoxes = result.boxes.map((b, i) => ({
+                    id: nextBoxId + i,
+                    x: b.x * scale,
+                    y: b.y * scale,
+                    width: b.width * scale,
+                    height: b.height * scale,
+                    zIndex: i,
+                }));
+                
+                setBoxes(newBoxes);
+                setNextBoxId(prev => prev + newBoxes.length);
+                toast({ title: "✅ AI layout detection complete!", variant: "default" });
+            }
+
+        } catch(err) {
+            console.error("AI layout detection failed", err);
+            toast({ title: "AI layout detection failed", description: "Please try another image.", variant: "destructive" });
+        } finally {
+            setIsAiProcessing(false);
+        }
+    };
+    e.target.value = "";
+  };
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || activeBoxId === null) return;
@@ -399,7 +428,7 @@ export function LayoutCanvasClient() {
         ctx.textAlign = 'center';
         ctx.fillText("Welcome to Layout Canvas!", canvas.width / 2, canvas.height / 2 - 20);
         ctx.font = '16px "PT Sans"';
-        ctx.fillText("Use the brush tool to draw a box to get started.", canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillText("Upload a template image to automatically detect the layout.", canvas.width / 2, canvas.height / 2 + 20);
     }
 
   }, [boxes, canvasBgColor, activeBoxId, mode]);
@@ -421,20 +450,23 @@ export function LayoutCanvasClient() {
           <aside className="w-16 p-2 border-r flex flex-col items-center space-y-2 bg-secondary/30">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant={mode === 'draw' ? 'secondary' : 'ghost'} size="icon" onClick={() => setMode('draw')}>
-                  <Brush />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right"><p>Draw Box (D)</p></TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
                 <Button variant={mode === 'select' ? 'secondary' : 'ghost'} size="icon" onClick={() => setMode('select')}>
                   <MousePointer />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right"><p>Select / Move (V)</p></TooltipContent>
             </Tooltip>
+            
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
+                        {isAiProcessing ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right"><p>Detect Layout from Image</p></TooltipContent>
+            </Tooltip>
+            <input ref={templateInputRef} type="file" className="hidden" accept="image/*" onChange={handleTemplateFileChange} />
+
             <div className="flex-grow" />
 
             <Tooltip>
@@ -453,7 +485,7 @@ export function LayoutCanvasClient() {
                         {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
                     </Button>
                 </TooltipTrigger>
-                <TooltipContent side="right"><p>Upload Image</p></TooltipContent>
+                <TooltipContent side="right"><p>Upload Image to Box</p></TooltipContent>
             </Tooltip>
             <input ref={imageInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
 
@@ -488,7 +520,6 @@ export function LayoutCanvasClient() {
         </TooltipProvider>
         <main 
             className={cn("flex-1 p-4 bg-muted/20 flex items-center justify-center overflow-auto", {
-                'cursor-crosshair': mode === 'draw',
                 'cursor-default': mode === 'select'
             })}
             onMouseDown={handleMouseDown}
