@@ -20,6 +20,7 @@ import {
   SendToBack,
   BringToFront,
   LayoutTemplate,
+  PlusSquare,
 } from "lucide-react";
 import { autoBackgroundFill } from "@/ai/flows/auto-background-fill";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
@@ -248,25 +249,41 @@ export function LayoutCanvasClient() {
             toast({ title: "🤖 AI is detecting layout...", description: "This might take a moment." });
             const result = await detectLayoutStructure({ imageDataUri: dataUrl });
 
+            if (!result.boxes || result.boxes.length === 0) {
+                toast({ title: "No layout detected", description: "Couldn't find any boxes in the image.", variant: "destructive" });
+                return;
+            }
+
             const image = new Image();
             image.src = dataUrl;
             image.onload = () => {
-                const scaleX = CANVAS_WIDTH / image.width;
-                const scaleY = CANVAS_HEIGHT / image.height;
+                const imgWidth = image.naturalWidth;
+                const imgHeight = image.naturalHeight;
+
+                const scaleX = CANVAS_WIDTH / imgWidth;
+                const scaleY = CANVAS_HEIGHT / imgHeight;
                 const scale = Math.min(scaleX, scaleY);
                 
-                const newBoxes = result.boxes.map((b, i) => ({
-                    id: nextBoxId + i,
-                    x: b.x * scale,
-                    y: b.y * scale,
-                    width: b.width * scale,
-                    height: b.height * scale,
-                    zIndex: i,
-                }));
+                const offsetX = (CANVAS_WIDTH - imgWidth * scale) / 2;
+                const offsetY = (CANVAS_HEIGHT - imgHeight * scale) / 2;
+
+                let currentId = nextBoxId;
+                const newBoxes = result.boxes.map((b) => {
+                    const box: Box = {
+                        id: currentId,
+                        x: b.x * scale + offsetX,
+                        y: b.y * scale + offsetY,
+                        width: b.width * scale,
+                        height: b.height * scale,
+                        zIndex: currentId,
+                    };
+                    currentId++;
+                    return box;
+                });
                 
-                setBoxes(newBoxes);
-                setNextBoxId(prev => prev + newBoxes.length);
-                toast({ title: "✅ AI layout detection complete!", variant: "default" });
+                setBoxes(prev => [...prev, ...newBoxes]);
+                setNextBoxId(currentId);
+                toast({ title: "✅ AI layout detection complete!", description: `Found ${newBoxes.length} boxes.`, variant: "default" });
             }
 
         } catch(err) {
@@ -323,6 +340,20 @@ export function LayoutCanvasClient() {
         };
     };
     e.target.value = "";
+  };
+  
+  const addBox = () => {
+    const newBox: Box = {
+      id: nextBoxId,
+      x: (CANVAS_WIDTH - 200) / 2,
+      y: (CANVAS_HEIGHT - 200) / 2,
+      width: 200,
+      height: 200,
+      zIndex: boxes.length,
+    };
+    setBoxes(prev => [...prev, newBox]);
+    setActiveBoxId(nextBoxId);
+    setNextBoxId(prev => prev + 1);
   };
   
   const deleteActiveBox = () => {
@@ -428,7 +459,7 @@ export function LayoutCanvasClient() {
         ctx.textAlign = 'center';
         ctx.fillText("Welcome to Layout Canvas!", canvas.width / 2, canvas.height / 2 - 20);
         ctx.font = '16px "PT Sans"';
-        ctx.fillText("Upload a template image to automatically detect the layout.", canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillText("Upload a template image to automatically detect the layout or add a box to start.", canvas.width / 2, canvas.height / 2 + 20);
     }
 
   }, [boxes, canvasBgColor, activeBoxId, mode]);
@@ -482,6 +513,15 @@ export function LayoutCanvasClient() {
                 <TooltipContent side="top"><p>Detect Layout from Image</p></TooltipContent>
             </Tooltip>
             <input ref={templateInputRef} type="file" className="hidden" accept="image/*" onChange={handleTemplateFileChange} />
+
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={addBox}>
+                        <PlusSquare />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Add Box</p></TooltipContent>
+            </Tooltip>
 
             <div className="flex-grow" />
 
