@@ -303,7 +303,7 @@ export function LayoutCanvasClient() {
             selectable: true,
           });
 
-          fabric.Image.fromURL(`https://placehold.co/${placeholderWidth}x${placeholderHeight}.png`, (img) => {
+          fabric.Image.fromURL(`https://picsum.photos/${placeholderWidth}/${placeholderHeight}?grayscale&blur=2`, (img) => {
             rect.set('fill', new fabric.Pattern({
               source: img.getElement(),
               repeat: 'no-repeat',
@@ -407,7 +407,7 @@ export function LayoutCanvasClient() {
       strokeWidth: 2,
     });
     
-    fabric.Image.fromURL(`https://placehold.co/${rectWidth}x${rectHeight}.png`, (img) => {
+    fabric.Image.fromURL(`https://picsum.photos/${rectWidth}/${rectHeight}?grayscale&blur=2`, (img) => {
       rect.set('fill', new fabric.Pattern({
         source: img.getElement(),
         repeat: 'no-repeat',
