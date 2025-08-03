@@ -222,19 +222,36 @@ export function LayoutCanvasClient() {
     // --- CANVAS MODE LISTENERS ---
     const handleCanvasPanStart = (opt: fabric.IEvent) => {
         const evt = opt.e as MouseEvent | TouchEvent;
-        // Pan with Alt key or with a single touch on empty space
-        if ((evt instanceof MouseEvent && evt.altKey) || (evt instanceof TouchEvent && evt.touches.length === 1 && !canvas.getActiveObject())) {
+        const touchEvent = evt as TouchEvent;
+
+        // Pan with Alt key, or with one/two finger touch on empty space
+        if ((evt instanceof MouseEvent && evt.altKey) || (touchEvent.touches && (touchEvent.touches.length === 1 || touchEvent.touches.length === 2) && !canvas.getActiveObject())) {
             canvas.isDragging = true;
             canvas.selection = false;
-            canvas.lastPosX = (evt instanceof MouseEvent) ? evt.clientX : evt.touches[0].clientX;
-            canvas.lastPosY = (evt instanceof MouseEvent) ? evt.clientY : evt.touches[0].clientY;
+            // For touch, use the average position of the two fingers
+            if (touchEvent.touches && touchEvent.touches.length === 2) {
+                canvas.lastPosX = (touchEvent.touches[0].clientX + touchEvent.touches[1].clientX) / 2;
+                canvas.lastPosY = (touchEvent.touches[0].clientY + touchEvent.touches[1].clientY) / 2;
+            } else {
+                canvas.lastPosX = (evt instanceof MouseEvent) ? evt.clientX : touchEvent.touches[0].clientX;
+                canvas.lastPosY = (evt instanceof MouseEvent) ? evt.clientY : touchEvent.touches[0].clientY;
+            }
         }
     };
     const handleCanvasPanMove = (opt: fabric.IEvent) => {
         if (canvas.isDragging) {
             const e = opt.e as MouseEvent | TouchEvent;
-            const clientX = (e instanceof MouseEvent) ? e.clientX : e.touches[0].clientX;
-            const clientY = (e instanceof MouseEvent) ? e.clientY : e.touches[0].clientY;
+            const touchEvent = e as TouchEvent;
+            let clientX, clientY;
+
+            if (touchEvent.touches && touchEvent.touches.length === 2) {
+                clientX = (touchEvent.touches[0].clientX + touchEvent.touches[1].clientX) / 2;
+                clientY = (touchEvent.touches[0].clientY + touchEvent.touches[1].clientY) / 2;
+            } else {
+                clientX = (e instanceof MouseEvent) ? e.clientX : touchEvent.touches[0].clientX;
+                clientY = (e instanceof MouseEvent) ? e.clientY : touchEvent.touches[0].clientY;
+            }
+            
             const vpt = canvas.viewportTransform!;
             vpt[4] += clientX - canvas.lastPosX;
             vpt[5] += clientY - canvas.lastPosY;
@@ -267,9 +284,8 @@ export function LayoutCanvasClient() {
 
     const handleCropPanStart = (opt: fabric.IEvent) => {
         const e = opt.e as MouseEvent | TouchEvent;
-        // For touch, ensure we are using the correct event
         const touchEvent = e as TouchEvent;
-        if(touchEvent.touches && touchEvent.touches.length > 1) return; // Ignore multi-touch for panning
+        if(touchEvent.touches && touchEvent.touches.length > 1) return; 
 
         cropPanStartPos = {
             x: 'clientX' in e ? e.clientX : touchEvent.touches[0].clientX,
@@ -286,20 +302,19 @@ export function LayoutCanvasClient() {
         const e = opt.e as MouseEvent | TouchEvent;
 
         const touchEvent = e as TouchEvent;
-        if(touchEvent.touches && touchEvent.touches.length > 1) return; // Ignore multi-touch for panning
+        if(touchEvent.touches && touchEvent.touches.length > 1) return;
 
         const currentPos = {
             x: 'clientX' in e ? e.clientX : touchEvent.touches[0].clientX,
             y: 'clientY' in e ? e.clientY : touchEvent.touches[0].clientY,
         };
 
-        // Divide by canvas zoom to correct for scaling
         const zoom = canvas.getZoom();
         pattern.offsetX! += (currentPos.x - cropPanStartPos.x) / zoom;
         pattern.offsetY! += (currentPos.y - cropPanStartPos.y) / zoom;
         
         cropPanStartPos = currentPos;
-        target.setCoords(); // not strictly necessary but good practice
+        target.setCoords();
         canvas.requestRenderAll();
     };
     const handleCropPanEnd = () => {
@@ -351,10 +366,6 @@ export function LayoutCanvasClient() {
         canvas.on('mouse:wheel', handleCropZoom);
         // @ts-ignore
         canvas.on('touch:gesture', handleTouchGesture);
-        // Using touch events directly for pan
-        canvas.on('touch:drag:start', handleCropPanStart);
-        canvas.on('touch:drag', handleCropPanMove);
-        canvas.on('touch:drag:end', handleCropPanEnd);
     } else {
         // --- Add Canvas Listeners ---
         canvas.on('mouse:down', handleCanvasPanStart);
@@ -376,9 +387,6 @@ export function LayoutCanvasClient() {
         canvas.off('mouse:wheel', handleCropZoom);
         // @ts-ignore
         canvas.off('touch:gesture', handleTouchGesture);
-        canvas.off('touch:drag:start', handleCropPanStart);
-        canvas.off('touch:drag', handleCropPanMove);
-        canvas.off('touch:drag:end', handleCropPanEnd);
     };
 
   }, [isCropMode]);
@@ -850,4 +858,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
