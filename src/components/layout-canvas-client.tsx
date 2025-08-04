@@ -133,12 +133,13 @@ export function LayoutCanvasClient() {
     let lastTapTarget: fabric.Object | undefined;
 
     const handleDoubleClick = (opt: fabric.IEvent<MouseEvent>) => {
-      if (opt.target && opt.target.type === 'rect') {
+      if (opt.target && opt.target.type === 'rect' && !isCropMode) {
         enterCropMode(opt.target as fabric.Rect);
       }
     };
 
     const handleTap = (opt: fabric.IEvent<MouseEvent>) => {
+        if(isCropMode) return;
         const now = new Date().getTime();
         const timeSinceLastTap = now - lastTapTime;
 
@@ -152,11 +153,10 @@ export function LayoutCanvasClient() {
     };
     
     canvas.on('mouse:dblclick', handleDoubleClick);
-    // Fabric's 'mouse:up' event can be used for both click and tap.
-    // We add our own double-tap detection logic here.
     canvas.on('mouse:up', handleTap);
 
     return canvas;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasSize.width, canvasSize.height, canvasBgColor]);
 
   const fitCanvasToContainer = useCallback(() => {
@@ -185,7 +185,6 @@ export function LayoutCanvasClient() {
     }
   }, []);
 
-  // Main useEffect for canvas initialization and resizing
   useEffect(() => {
     let canvas: fabric.Canvas;
     if (!fabricCanvasRef.current) {
@@ -208,27 +207,27 @@ export function LayoutCanvasClient() {
 
     return () => {
       if (canvasWrapperRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         resizeObserver.unobserve(canvasWrapperRef.current);
       }
     }
   }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
 
 
-  // Effect for managing event listeners based on mode
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
-    // --- CANVAS MODE LISTENERS ---
+    // --- Define All Event Handlers ---
+
+    // --- CANVAS MODE HANDLERS ---
     const handleCanvasPanStart = (opt: fabric.IEvent) => {
         const evt = opt.e as MouseEvent | TouchEvent;
         const touchEvent = evt as TouchEvent;
-
         // Pan with Alt key, or with one/two finger touch on empty space
         if ((evt instanceof MouseEvent && evt.altKey) || (touchEvent.touches && (touchEvent.touches.length === 1 || touchEvent.touches.length === 2) && !canvas.getActiveObject())) {
             canvas.isDragging = true;
             canvas.selection = false;
-            // For touch, use the average position of the two fingers
             if (touchEvent.touches && touchEvent.touches.length === 2) {
                 canvas.lastPosX = (touchEvent.touches[0].clientX + touchEvent.touches[1].clientX) / 2;
                 canvas.lastPosY = (touchEvent.touches[0].clientY + touchEvent.touches[1].clientY) / 2;
@@ -243,7 +242,6 @@ export function LayoutCanvasClient() {
             const e = opt.e as MouseEvent | TouchEvent;
             const touchEvent = e as TouchEvent;
             let clientX, clientY;
-
             if (touchEvent.touches && touchEvent.touches.length === 2) {
                 clientX = (touchEvent.touches[0].clientX + touchEvent.touches[1].clientX) / 2;
                 clientY = (touchEvent.touches[0].clientY + touchEvent.touches[1].clientY) / 2;
@@ -251,7 +249,6 @@ export function LayoutCanvasClient() {
                 clientX = (e instanceof MouseEvent) ? e.clientX : touchEvent.touches[0].clientX;
                 clientY = (e instanceof MouseEvent) ? e.clientY : touchEvent.touches[0].clientY;
             }
-            
             const vpt = canvas.viewportTransform!;
             vpt[4] += clientX - canvas.lastPosX;
             vpt[5] += clientY - canvas.lastPosY;
@@ -278,7 +275,7 @@ export function LayoutCanvasClient() {
         opt.e.stopPropagation();
     };
 
-    // --- CROP MODE LISTENERS ---
+    // --- CROP MODE HANDLERS ---
     let cropPanStartPos: { x: number, y: number } | null = null;
     let cropZoomStartScale: number = 1;
 
@@ -286,7 +283,6 @@ export function LayoutCanvasClient() {
         const e = opt.e as MouseEvent | TouchEvent;
         const touchEvent = e as TouchEvent;
         if(touchEvent.touches && touchEvent.touches.length > 1) return; 
-
         cropPanStartPos = {
             x: 'clientX' in e ? e.clientX : touchEvent.touches[0].clientX,
             y: 'clientY' in e ? e.clientY : touchEvent.touches[0].clientY,
@@ -300,21 +296,16 @@ export function LayoutCanvasClient() {
         if (!target || !(target.fill instanceof fabric.Pattern)) return;
         const pattern = target.fill;
         const e = opt.e as MouseEvent | TouchEvent;
-
         const touchEvent = e as TouchEvent;
         if(touchEvent.touches && touchEvent.touches.length > 1) return;
-
         const currentPos = {
             x: 'clientX' in e ? e.clientX : touchEvent.touches[0].clientX,
             y: 'clientY' in e ? e.clientY : touchEvent.touches[0].clientY,
         };
-
         const zoom = canvas.getZoom();
         pattern.offsetX! += (currentPos.x - cropPanStartPos.x) / zoom;
         pattern.offsetY! += (currentPos.y - cropPanStartPos.y) / zoom;
-        
         cropPanStartPos = currentPos;
-        target.setCoords();
         canvas.requestRenderAll();
     };
     const handleCropPanEnd = () => {
@@ -323,28 +314,24 @@ export function LayoutCanvasClient() {
     const handleCropZoom = (opt: fabric.IEvent<WheelEvent>) => {
         const target = canvas.getActiveObject() as fabric.Rect | null;
         if (!target || !(target.fill instanceof fabric.Pattern)) return;
-        
         const pattern = target.fill;
         const delta = opt.e.deltaY;
         let zoom = pattern.scaleX || 1;
         zoom *= 0.999 ** delta;
         if (zoom < 0.1) zoom = 0.1;
         if (zoom > 10) zoom = 10;
-        
         pattern.scaleX = zoom;
         pattern.scaleY = zoom;
         canvas.requestRenderAll();
         opt.e.preventDefault();
         opt.e.stopPropagation();
     };
-
     // @ts-ignore - Fabric's touch gesture is not strongly typed
     const handleTouchGesture = (opt) => {
         if(opt.e.touches && opt.e.touches.length === 2) {
              const target = canvas.getActiveObject() as fabric.Rect | null;
             if (!target || !(target.fill instanceof fabric.Pattern)) return;
             const pattern = target.fill;
-
             if (opt.state === 'start') {
                 cropZoomStartScale = pattern.scaleX || 1;
             }
@@ -357,36 +344,49 @@ export function LayoutCanvasClient() {
         }
     }
 
+    const addCanvasListeners = () => {
+        canvas.on('mouse:down', handleCanvasPanStart);
+        canvas.on('mouse:move', handleCanvasPanMove);
+        canvas.on('mouse:up', handleCanvasPanEnd);
+        canvas.on('mouse:wheel', handleCanvasZoom);
+    }
+    const removeCanvasListeners = () => {
+        canvas.off('mouse:down', handleCanvasPanStart);
+        canvas.off('mouse:move', handleCanvasPanMove);
+        canvas.off('mouse:up', handleCanvasPanEnd);
+        canvas.off('mouse:wheel', handleCanvasZoom);
+    }
 
-    if (isCropMode) {
-        // --- Add Crop Listeners ---
+    const addCropListeners = () => {
         canvas.on('mouse:down', handleCropPanStart);
         canvas.on('mouse:move', handleCropPanMove);
         canvas.on('mouse:up', handleCropPanEnd);
         canvas.on('mouse:wheel', handleCropZoom);
         // @ts-ignore
         canvas.on('touch:gesture', handleTouchGesture);
-    } else {
-        // --- Add Canvas Listeners ---
-        canvas.on('mouse:down', handleCanvasPanStart);
-        canvas.on('mouse:move', handleCanvasPanMove);
-        canvas.on('mouse:up', handleCanvasPanEnd);
-        canvas.on('mouse:wheel', handleCanvasZoom);
     }
-    
-    return () => {
-        // --- Remove All Listeners on cleanup ---
-        canvas.off('mouse:down', handleCanvasPanStart);
-        canvas.off('mouse:move', handleCanvasPanMove);
-        canvas.off('mouse:up', handleCanvasPanEnd);
-        canvas.off('mouse:wheel', handleCanvasZoom);
 
+    const removeCropListeners = () => {
         canvas.off('mouse:down', handleCropPanStart);
         canvas.off('mouse:move', handleCropPanMove);
         canvas.off('mouse:up', handleCropPanEnd);
         canvas.off('mouse:wheel', handleCropZoom);
         // @ts-ignore
         canvas.off('touch:gesture', handleTouchGesture);
+    }
+
+
+    if (isCropMode) {
+        removeCanvasListeners();
+        addCropListeners();
+    } else {
+        removeCropListeners();
+        addCanvasListeners();
+    }
+    
+    return () => {
+      removeCanvasListeners();
+      removeCropListeners();
     };
 
   }, [isCropMode]);
@@ -445,6 +445,7 @@ export function LayoutCanvasClient() {
           fabric.Image.fromURL(`https://placehold.co/${placeholderWidth}x${placeholderHeight}.png?text=%20`, (img) => {
               if (img.getElement() === null) {
                   console.error("Failed to load placeholder image");
+                  toast({ title: "Error loading placeholder", variant: "destructive" });
                   return;
               }
               const rect = new fabric.Rect({
@@ -519,6 +520,11 @@ export function LayoutCanvasClient() {
             }
 
             fabric.Image.fromURL(finalDataUrl, (fabricImg) => {
+                if(fabricImg.getElement() === null){
+                    toast({ title: "Failed to load image", variant: "destructive" });
+                    setIsAiProcessing(false);
+                    return;
+                }
                 const scale = Math.max(box.width! / fabricImg.width!, box.height! / fabricImg.height!);
                 
                 box.set('fill', new fabric.Pattern({
@@ -551,6 +557,7 @@ export function LayoutCanvasClient() {
     fabric.Image.fromURL(`https://placehold.co/${rectWidth}x${rectHeight}.png?text=%20`, (img) => {
         if (img.getElement() === null) {
             console.error("Failed to load placeholder image");
+            toast({ title: "Failed to load placeholder", variant: "destructive" });
             return;
         }
 
