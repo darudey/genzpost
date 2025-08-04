@@ -73,7 +73,7 @@ export function LayoutCanvasClient() {
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [canvasSizes, setCanvasSizes] = useState<CanvasSizeMap>(INITIAL_CANVAS_SIZES);
-  const [currentSizeKey, setCurrentSizeKey] = useState<keyof typeof canvasSizes>("400x600");
+  const [currentSizeKey, setCurrentSizeKey] = useState<CanvasSizeKey>("400x600");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
@@ -259,6 +259,23 @@ export function LayoutCanvasClient() {
       }
     }
   }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
+
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    const handleRemoved = (opt: { target?: fabric.Object }) => {
+      if (opt.target === croppingGroupRef.current) {
+        exitCropMode();
+      }
+    };
+    canvas.on('object:removed', handleRemoved);
+    return () => {
+        if (canvas) {
+            canvas.off('object:removed', handleRemoved);
+        }
+    };
+  }, [isCropMode, exitCropMode]);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -487,7 +504,7 @@ export function LayoutCanvasClient() {
   const handleSaveSizes = () => {
     setCanvasSizes(tempSizes);
     if (!tempSizes[currentSizeKey]) {
-      setCurrentSizeKey(Object.keys(tempSizes)[0]);
+      setCurrentSizeKey(Object.keys(tempSizes)[0] as CanvasSizeKey);
     }
     setIsEditSizesOpen(false);
   };
@@ -558,7 +575,7 @@ export function LayoutCanvasClient() {
                                 <Select
                                     value={currentSizeKey}
                                     onValueChange={(value: CanvasSizeKey) => {
-                                      setCurrentSizeKey(value as keyof typeof canvasSizes);
+                                      setCurrentSizeKey(value);
                                       setIsSizePopoverOpen(false);
                                     }}
                                 >
