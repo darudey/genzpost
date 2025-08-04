@@ -86,40 +86,27 @@ export function LayoutCanvasClient() {
     if (!canvas || !targetGroup.data?.isCropGroup) return;
 
     setIsCropMode(true);
+    
+    // Deactivate all other objects
     canvas.discardActiveObject();
     
-    const seen_frame = targetGroup.getObjects('rect')[0] as fabric.Rect;
-    const unseen_frame = targetGroup.getObjects('image')[0] as fabric.Image;
+    // Get the image from the group
+    const image = targetGroup.getObjects('image')[0] as fabric.Image;
     
-    // Make the group non-interactive so it doesn't interfere
-    targetGroup.set({ selectable: false, evented: false });
-    
-    // The seen_frame is just a visual boundary, not interactive
-    seen_frame.set({ evented: false });
-    
-    // The unseen_frame is what we want to manipulate
-    unseen_frame.set({ 
-      evented: true, 
-      selectable: true,
-      lockMovementX: false,
-      lockMovementY: false,
+    // Make the group itself not selectable, but allow events to pass through
+    targetGroup.set({
+        selectable: false,
+        evented: true, 
     });
-    
-    // Add the image to the canvas temporarily to make it the active object
-    canvas.add(unseen_frame);
-    canvas.setActiveObject(unseen_frame);
 
-    // Ensure all transform controls are visible
-    unseen_frame.setControlsVisibility({
-        mt: true, // middle top
-        mb: true, // middle bottom
-        ml: true, // middle left
-        mr: true, // middle right
-        bl: true, // bottom left
-        br: true, // bottom right
-        tl: true, // top left
-        tr: true, // top right
-        mtr: true // rotation
+    // Make the image active and selectable within the group context
+    canvas.setActiveObject(image);
+
+    // Ensure the image controls are visible for scaling/rotating
+    image.setControlsVisibility({
+        mt: true, mb: true, ml: true, mr: true,
+        bl: true, br: true, tl: true, tr: true,
+        mtr: true
     });
 
     canvas.renderAll();
@@ -130,17 +117,18 @@ export function LayoutCanvasClient() {
     if (!canvas) return;
 
     const activeImage = canvas.getActiveObject() as fabric.Image;
-    if (!activeImage || !activeImage.clipPath || !activeImage.data?.group) {
+    if (!activeImage || !activeImage.data?.group) {
         setIsCropMode(false); // Failsafe
         return;
     }
     
+    // Get the parent group from the image's data property
     const group = activeImage.data.group as fabric.Group;
-    canvas.remove(activeImage);
-    group.addWithUpdate(activeImage);
     
+    // Make the group selectable again
     group.set({ selectable: true, evented: true });
     
+    // Deselect the image and select the parent group
     canvas.discardActiveObject();
     canvas.setActiveObject(group);
     
@@ -165,6 +153,11 @@ export function LayoutCanvasClient() {
     const handleDoubleClick = (opt: fabric.IEvent<MouseEvent>) => {
       if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
         enterCropMode(opt.target as fabric.Group);
+      } else if (isCropMode) {
+        // If we are in crop mode and the user clicks outside the image, exit.
+        if (!opt.target || opt.target.type !== 'image') {
+          exitCropMode();
+        }
       }
     };
 
@@ -667,3 +660,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
