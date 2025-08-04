@@ -73,7 +73,7 @@ export function LayoutCanvasClient() {
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [canvasSizes, setCanvasSizes] = useState<CanvasSizeMap>(INITIAL_CANVAS_SIZES);
-  const [currentSizeKey, setCurrentSizeKey] = useState<CanvasSizeKey>("400x600");
+  const [currentSizeKey, setCurrentSizeKey] = useState<keyof typeof canvasSizes>("400x600");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
@@ -168,23 +168,43 @@ export function LayoutCanvasClient() {
     });
     fabricCanvasRef.current = canvas;
     
-    const handleDoubleClick = (opt: fabric.IEvent<MouseEvent>) => {
+    // Desktop: double click to enter crop mode
+    canvas.on('mouse:dblclick', (opt) => {
       if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
         enterCropMode(opt.target as fabric.Group);
       }
-    };
+    });
     
-    canvas.on('mouse:dblclick', handleDoubleClick);
-
+    // Mobile: double tap to enter crop mode
+    let lastTapTime = 0;
+    let lastTapTarget: fabric.Object | undefined;
+    
     canvas.on('mouse:down', (opt) => {
-      if (isCropMode && opt.target !== canvas.getActiveObject()) {
-        // In crop mode, do nothing if the user clicks outside the active image
+      if (isCropMode) {
+        // If in crop mode, only allow interaction with the active image.
+        // Prevent clicks outside the image from doing anything.
+        if (opt.target !== canvas.getActiveObject()) {
+          // This is a bit of a hack to prevent deselection
+          canvas.selection = false;
+          setTimeout(() => { canvas.selection = false; }, 0);
+        }
         return;
       }
+      
+      const currentTime = new Date().getTime();
+      const timeSinceLastTap = currentTime - lastTapTime;
+
+      if (timeSinceLastTap < 300 && opt.target === lastTapTarget && opt.target && opt.target.data?.isCropGroup) {
+        // Double tap detected
+        enterCropMode(opt.target as fabric.Group);
+      }
+
+      lastTapTime = currentTime;
+      lastTapTarget = opt.target;
     });
 
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor, isCropMode, enterCropMode]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, isCropMode, enterCropMode, exitCropMode]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -539,7 +559,7 @@ export function LayoutCanvasClient() {
                                 <Select
                                     value={currentSizeKey}
                                     onValueChange={(value: CanvasSizeKey) => {
-                                      setCurrentSizeKey(value);
+                                      setCurrentSizeKey(value as keyof typeof canvasSizes);
                                       setIsSizePopoverOpen(false);
                                     }}
                                 >
@@ -673,3 +693,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
