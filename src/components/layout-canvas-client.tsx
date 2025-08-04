@@ -54,6 +54,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type CanvasSize = { width: number; height: number };
 type CanvasSizeMap = Record<string, CanvasSize>;
+type CanvasSizeKey = keyof CanvasSizeMap;
 
 const INITIAL_CANVAS_SIZES: CanvasSizeMap = {
     "400x600": { width: 400, height: 600 },
@@ -72,7 +73,7 @@ export function LayoutCanvasClient() {
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [canvasSizes, setCanvasSizes] = useState<CanvasSizeMap>(INITIAL_CANVAS_SIZES);
-  const [currentSizeKey, setCurrentSizeKey] = useState<keyof typeof canvasSizes>("400x600");
+  const [currentSizeKey, setCurrentSizeKey] = useState<CanvasSizeKey>("400x600");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
@@ -185,10 +186,6 @@ export function LayoutCanvasClient() {
             lastTapTime = 0; 
             return;
         }
-        
-        if (isCropMode && (!opt.target || opt.target.type !== 'image')) {
-          exitCropMode();
-        }
 
         lastTapTime = now;
         lastTapTarget = opt.target;
@@ -198,7 +195,7 @@ export function LayoutCanvasClient() {
     canvas.on('mouse:up', handleTap);
 
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor, isCropMode, enterCropMode, exitCropMode]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, isCropMode, enterCropMode]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -240,19 +237,20 @@ export function LayoutCanvasClient() {
     const resizeObserver = new ResizeObserver(() => {
         fitCanvasToContainer();
     });
-    const canvasWrapper = canvasWrapperRef.current;
-    if (canvasWrapper) {
-        resizeObserver.observe(canvasWrapper);
+    
+    const currentCanvasWrapper = canvasWrapperRef.current;
+    if (currentCanvasWrapper) {
+        resizeObserver.observe(currentCanvasWrapper);
     }
     
     fitCanvasToContainer();
     
     return () => {
-      if (canvasWrapper) {
-        resizeObserver.unobserve(canvasWrapper);
+      if (currentCanvasWrapper) {
+        resizeObserver.unobserve(currentCanvasWrapper);
       }
     }
-  }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
+  }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor, canvasWrapperRef]);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -551,7 +549,7 @@ export function LayoutCanvasClient() {
                             <div className="flex items-center gap-2">
                                 <Select
                                     value={currentSizeKey}
-                                    onValueChange={(value: string) => {
+                                    onValueChange={(value: CanvasSizeKey) => {
                                       setCurrentSizeKey(value);
                                       setIsSizePopoverOpen(false);
                                     }}
