@@ -86,18 +86,20 @@ export function LayoutCanvasClient() {
     if (!canvas || !targetGroup.data?.isCropGroup) return;
 
     setIsCropMode(true);
-    
+
+    // Deselect everything
     canvas.discardActiveObject();
-    
+
+    // Get the image (unseen_frame) from the group
     const image = targetGroup.getObjects('image')[0] as fabric.Image;
-    
+
+    // Make group not selectable during crop
     targetGroup.set({
-        selectable: false,
-        evented: false, 
+      selectable: false,
+      evented: false,
     });
 
-    canvas.setActiveObject(image);
-
+    // Enable full image editing (move, scale, rotate)
     image.set({
       selectable: true,
       evented: true,
@@ -108,14 +110,19 @@ export function LayoutCanvasClient() {
       lockRotation: false,
     });
 
+    // Show control handles (corners, edges, rotate)
     image.setControlsVisibility({
-        mt: true, mb: true, ml: true, mr: true,
-        bl: true, br: true, tl: true, tr: true,
-        mtr: true
+      tl: true, tr: true, bl: true, br: true,
+      mt: true, mb: true, ml: true, mr: true,
+      mtr: true,
     });
 
+    // Set active object and disable background selection
+    canvas.setActiveObject(image);
+    canvas.selection = false;
+
     canvas.renderAll();
-  }
+  };
 
   const exitCropMode = () => {
     const canvas = fabricCanvasRef.current;
@@ -123,13 +130,14 @@ export function LayoutCanvasClient() {
 
     const activeImage = canvas.getActiveObject() as fabric.Image;
     if (!activeImage || !activeImage.data?.group) {
-        setIsCropMode(false); 
-        canvas.renderAll();
-        return;
+      setIsCropMode(false);
+      canvas.renderAll();
+      return;
     }
-    
+
     const group = activeImage.data.group as fabric.Group;
 
+    // Lock image again
     activeImage.set({
       selectable: false,
       evented: false,
@@ -139,15 +147,21 @@ export function LayoutCanvasClient() {
       lockScalingY: true,
       lockRotation: true,
     });
-    
-    group.set({ selectable: true, evented: true });
-    
+
+    // Make group selectable again
+    group.set({
+      selectable: true,
+      evented: true,
+    });
+
+    // Reattach controls to group
     canvas.discardActiveObject();
     canvas.setActiveObject(group);
-    
+    canvas.selection = true;
+
     setIsCropMode(false);
     canvas.renderAll();
-  }
+  };
 
 
   const initCanvas = useCallback(() => {
@@ -177,10 +191,14 @@ export function LayoutCanvasClient() {
         const now = new Date().getTime();
         const timeSinceLastTap = now - lastTapTime;
 
-        if (opt.target && opt.target.data?.isCropGroup && !isCropMode && timeSinceLastTap < 500 && lastTapTarget === opt.target) {
-          enterCropMode(opt.target as fabric.Group);
-          lastTapTime = 0; 
-          return;
+        if (timeSinceLastTap < 500 && lastTapTarget === opt.target) {
+            if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
+                enterCropMode(opt.target as fabric.Group);
+            } else if (isCropMode && (!opt.target || opt.target.type !== 'image')) {
+                exitCropMode();
+            }
+            lastTapTime = 0; 
+            return;
         }
         lastTapTime = now;
         lastTapTarget = opt.target;
@@ -377,6 +395,7 @@ export function LayoutCanvasClient() {
 
     fabric.Image.fromURL(`https://placehold.co/${rectWidth}x${rectHeight}.png`, (img) => {
         img.set({
+            name: 'image',
             originX: 'center',
             originY: 'center',
             selectable: false,
@@ -392,6 +411,8 @@ export function LayoutCanvasClient() {
             left: rectLeft,
             top: rectTop,
             data: { isCropGroup: true },
+            selectable: true,
+            evented: true,
         });
 
         img.data = { group };
