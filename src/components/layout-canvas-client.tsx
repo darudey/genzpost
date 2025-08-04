@@ -97,29 +97,91 @@ export function LayoutCanvasClient() {
     }
     const activeObject = canvas.getActiveObject();
     if (activeObject && activeObject.data?.isCropGroup) {
-      const { tr } = activeObject.oCoords!;
+      // Need to account for canvas position on the page
       const canvasRect = canvas.getElement().getBoundingClientRect();
+      const zoom = canvas.getZoom();
+      const { tr } = activeObject.oCoords!;
+      
+      const absoluteTop = tr.y * zoom + canvasRect.top + window.scrollY;
+      const absoluteLeft = tr.x * zoom + canvasRect.left + window.scrollX;
+
       setCropIconPosition({
-          top: tr.y - 14 + canvasRect.top + window.scrollY,
-          left: tr.x - 14 + canvasRect.left + window.scrollX,
+          top: absoluteTop - 14,
+          left: absoluteLeft - 14,
       });
     } else {
       setCropIconPosition(null);
     }
   }, [cropState]);
 
+  const confirmCrop = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!cropState || !canvas) return;
+  
+    canvas.off('mouse:wheel');
+    const { group, image, overlay } = cropState;
+  
+    image.set({
+      selectable: false,
+      evented: false,
+      hasControls: false,
+    });
+  
+    group.addWithUpdate();
+    canvas.remove(overlay);
+    
+    canvas.getObjects().forEach(obj => {
+      obj.set({ selectable: true, evented: true });
+    });
+    
+    flushSync(() => setCropState(null));
+    canvas.setActiveObject(group);
+    canvas.renderAll();
+  }, [cropState]);
+  
+  const cancelCrop = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!cropState || !canvas) return;
+  
+    canvas.off('mouse:wheel');
+    const { group, image, overlay, originalImageState } = cropState;
+  
+    image.set(originalImageState);
+    image.set({
+      selectable: false,
+      evented: false,
+      hasControls: false,
+    });
+  
+    group.addWithUpdate();
+    canvas.remove(overlay);
+
+    canvas.getObjects().forEach(obj => {
+      obj.set({ selectable: true, evented: true });
+    });
+    
+    flushSync(() => setCropState(null));
+    canvas.setActiveObject(group);
+    canvas.renderAll();
+  }, [cropState]);
+
   const openCrop = useCallback((group: fabric.Group) => {
     const canvas = fabricCanvasRef.current;
+    if (!canvas || !group) return;
+
+    // If we're already cropping, cancel the old one first.
+    if (cropState) {
+        cancelCrop();
+    }
+
     const image = group.getObjects('image')[0] as fabric.Image;
-    if (!canvas || !image) return;
+    if (!image) return;
   
     const frame = group.getObjects('rect')[0] as fabric.Rect;
     const { overlay } = createCropOverlay(canvas, frame);
   
     canvas.discardActiveObject();
     canvas.add(overlay);
-    overlay.sendToBack();
-    group.bringToFront();
     
     const originalImageState = {
       left: image.left,
@@ -139,8 +201,13 @@ export function LayoutCanvasClient() {
       lockRotation: false,
       lockUniScaling: true, 
       hasControls: true,
+      cornerColor: '#fff',
+      cornerSize: 12,
+      transparentCorners: false,
     });
   
+    group.bringToFront();
+    image.bringToFront();
     canvas.setActiveObject(image);
     
     canvas.getObjects().forEach(obj => {
@@ -170,56 +237,7 @@ export function LayoutCanvasClient() {
         setCropIconPosition(null);
     });
     canvas.renderAll();
-  }, []);
-
-  const confirmCrop = useCallback(() => {
-    if (!cropState) return;
-    const { group, image, overlay } = cropState;
-    const canvas = fabricCanvasRef.current!;
-  
-    canvas.off('mouse:wheel');
-
-    image.set({
-      selectable: false,
-      evented: false,
-    });
-  
-    group.addWithUpdate();
-    canvas.remove(overlay);
-    
-    canvas.getObjects().forEach(obj => {
-      obj.set({ selectable: true, evented: true });
-    });
-
-    canvas.setActiveObject(group);
-    flushSync(() => setCropState(null));
-    canvas.renderAll();
-  }, [cropState]);
-  
-  const cancelCrop = useCallback(() => {
-    if (!cropState) return;
-    const { group, image, overlay, originalImageState } = cropState;
-    const canvas = fabricCanvasRef.current!;
-  
-    canvas.off('mouse:wheel');
-
-    image.set(originalImageState);
-    image.set({
-      selectable: false,
-      evented: false,
-    });
-  
-    group.addWithUpdate();
-    canvas.remove(overlay);
-
-    canvas.getObjects().forEach(obj => {
-      obj.set({ selectable: true, evented: true });
-    });
-    
-    canvas.setActiveObject(group);
-    flushSync(() => setCropState(null));
-    canvas.renderAll();
-  }, [cropState]);
+  }, [cropState, cancelCrop]);
 
 
   const initCanvas = useCallback(() => {
@@ -239,14 +257,11 @@ export function LayoutCanvasClient() {
         'object:moving': updateCropIconPosition,
         'object:scaling': updateCropIconPosition,
         'object:rotating': updateCropIconPosition,
-    });
-
-    canvas.on('object:removed', (opt) => {
-      if (cropState && opt.target === cropState.group) {
-        flushSync(() => {
-          cancelCrop();
-        });
-      }
+        'object:removed': (opt) => {
+            if (cropState && opt.target === cropState.group) {
+                flushSync(() => cancelCrop());
+            }
+        },
     });
     
     return canvas;
@@ -265,8 +280,8 @@ export function LayoutCanvasClient() {
       const scale = Math.min(scaleX, scaleY) * 0.9;
 
       canvas.setZoom(scale);
-      canvas.setWidth(canvas.width! * canvas.getZoom());
-      canvas.setHeight(canvas.height! * canvas.getZoom());
+      canvas.setWidth(canvas.width! * scale);
+      canvas.setHeight(canvas.height! * scale);
 
       const vpt = canvas.viewportTransform;
       if (vpt) {
@@ -290,7 +305,10 @@ export function LayoutCanvasClient() {
         canvas.renderAll();
     }
 
-    const resizeObserver = new ResizeObserver(fitCanvasToContainer);
+    const resizeObserver = new ResizeObserver(() => {
+        fitCanvasToContainer();
+        updateCropIconPosition();
+    });
     
     const wrapper = canvasWrapperRef.current;
     if (wrapper) {
@@ -304,7 +322,7 @@ export function LayoutCanvasClient() {
             resizeObserver.disconnect();
         }
     }
-  }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
+  }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor, updateCropIconPosition]);
 
 
   useEffect(() => {

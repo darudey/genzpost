@@ -3,11 +3,18 @@ import { fabric } from 'fabric';
 
 export function createCropOverlay(
   canvas: fabric.Canvas,
-  frame: fabric.Rect   // the visible white stroke
+  frame: fabric.Rect
 ) {
-  const { left, top, width, height } = frame.getBoundingRect();
+  // Get the frame's absolute bounding rectangle
+  const frameRect = frame.getBoundingRect(true);
+  
+  const vpt = canvas.viewportTransform;
+  if (!vpt) {
+    // Should not happen, but as a safeguard
+    return { overlay: new fabric.Rect() };
+  }
 
-  // dark backdrop
+  // The dark backdrop, covering the entire canvas
   const overlay = new fabric.Rect({
     left: 0,
     top: 0,
@@ -18,19 +25,16 @@ export function createCropOverlay(
     evented: false,
   });
 
-  // “hole” that lets the image shine through
-  // A slight issue with clipPath is that it's relative to the object's center.
-  // We need to invert the transformation of the overlay to make the clip path's coordinates absolute.
-  const invertedMatrix = fabric.util.invertTransform(overlay.calcTransformMatrix());
-  const transformedPoint = fabric.util.transformPoint({x: left, y: top} as fabric.Point, invertedMatrix);
-
+  // Calculate the position and dimensions of the "hole" by inverting the viewport transform.
+  // This ensures the clip path aligns with the frame, regardless of canvas zoom or pan.
   const clipRect = new fabric.Rect({
-      left: transformedPoint.x,
-      top: transformedPoint.y,
-      width: width,
-      height: height,
+    left: frameRect.left,
+    top: frameRect.top,
+    width: frameRect.width,
+    height: frameRect.height,
+    absolutePositioned: true, // This is key for clipPath to respect absolute coords.
   });
-  
+
   overlay.clipPath = clipRect;
 
   return { overlay };
