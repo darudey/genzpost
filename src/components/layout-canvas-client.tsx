@@ -119,6 +119,7 @@ export function LayoutCanvasClient() {
     const activeImage = canvas.getActiveObject() as fabric.Image;
     if (!activeImage || !activeImage.data?.group) {
         setIsCropMode(false); // Failsafe
+        canvas.renderAll();
         return;
     }
     
@@ -316,7 +317,9 @@ export function LayoutCanvasClient() {
         
         fabric.Image.fromURL(dataUrl, (img) => {
             const oldUnseenFrame = group.getObjects('image')[0];
-            group.remove(oldUnseenFrame);
+            if (oldUnseenFrame) {
+                group.remove(oldUnseenFrame);
+            }
 
             img.set({
               originX: 'center',
@@ -418,6 +421,10 @@ export function LayoutCanvasClient() {
     if (!canvas) return;
 
     if (isCropMode) exitCropMode();
+    
+    // Deselect all objects before exporting
+    canvas.discardActiveObject();
+    canvas.renderAll();
     
     const dataUrl = canvas.toDataURL({ format: 'png', quality: 1.0 });
     const link = document.createElement("a");
@@ -660,5 +667,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
-    
