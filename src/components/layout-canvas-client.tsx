@@ -180,22 +180,21 @@ export function LayoutCanvasClient() {
     let lastTapTarget: fabric.Object | undefined;
     
     canvas.on('mouse:down', (opt) => {
+      // This is the main event handler for taps and clicks
       if (isCropMode) {
-        // If in crop mode, only allow interaction with the active image.
-        // Prevent clicks outside the image from doing anything.
+        // If we are in crop mode, we only want to interact with the active image.
+        // If the user clicks anywhere else, we do nothing. This prevents
+        // the image from being deselected and exiting crop mode accidentally.
         if (opt.target !== canvas.getActiveObject()) {
-          // This is a bit of a hack to prevent deselection
-          canvas.selection = false;
-          setTimeout(() => { canvas.selection = false; }, 0);
+          return;
         }
-        return;
       }
       
       const currentTime = new Date().getTime();
       const timeSinceLastTap = currentTime - lastTapTime;
 
       if (timeSinceLastTap < 300 && opt.target === lastTapTarget && opt.target && opt.target.data?.isCropGroup) {
-        // Double tap detected
+        // Double tap detected on a group, enter crop mode.
         enterCropMode(opt.target as fabric.Group);
       }
 
@@ -693,5 +692,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
-    
