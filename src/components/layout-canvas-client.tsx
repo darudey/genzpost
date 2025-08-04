@@ -81,7 +81,7 @@ export function LayoutCanvasClient() {
   
   const canvasSize = canvasSizes[currentSizeKey as CanvasSizeKey];
 
-  const enterCropMode = (targetGroup: fabric.Group) => {
+  const enterCropMode = useCallback((targetGroup: fabric.Group) => {
     const canvas = fabricCanvasRef.current;
     if (!canvas || !targetGroup.data?.isCropGroup) return;
 
@@ -117,9 +117,9 @@ export function LayoutCanvasClient() {
     canvas.selection = false;
 
     canvas.renderAll();
-  };
+  }, []);
 
-  const exitCropMode = () => {
+  const exitCropMode = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
@@ -152,7 +152,7 @@ export function LayoutCanvasClient() {
     setIsCropMode(false);
     croppingGroupRef.current = null;
     canvas.renderAll();
-  };
+  }, []);
 
 
   const initCanvas = useCallback(() => {
@@ -198,8 +198,7 @@ export function LayoutCanvasClient() {
     canvas.on('mouse:up', handleTap);
 
     return canvas;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasSize.width, canvasSize.height, canvasBgColor]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, isCropMode, enterCropMode, exitCropMode]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -246,11 +245,11 @@ export function LayoutCanvasClient() {
     }
     
     fitCanvasToContainer();
-
+    
+    const canvasWrapper = canvasWrapperRef.current;
     return () => {
-      if (canvasWrapperRef.current) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        resizeObserver.unobserve(canvasWrapperRef.current);
+      if (canvasWrapper) {
+        resizeObserver.unobserve(canvasWrapper);
       }
     }
   }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
@@ -605,12 +604,12 @@ export function LayoutCanvasClient() {
                 <input ref={imageInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
 
                 <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => changeZIndex('front')} disabled={isCropMode}>
-                            <BringToFront />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top"><p>Bring to Front</p></TooltipContent>
+                  <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={() => changeZIndex('front')} disabled={isCropMode}>
+                          <BringToFront />
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top"><p>Bring to Front</p></TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
