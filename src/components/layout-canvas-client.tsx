@@ -88,6 +88,27 @@ export function LayoutCanvasClient() {
     overlay: fabric.Rect;
     originalImageState: any;
   } | null>(null);
+  const [cropIconPosition, setCropIconPosition] = useState<{top: number, left: number} | null>(null);
+
+
+  const updateCropIconPosition = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) {
+      setCropIconPosition(null);
+      return;
+    }
+    const activeObject = canvas.getActiveObject();
+    if (activeObject && activeObject.data?.isCropGroup) {
+      const { tr } = activeObject.oCoords!;
+      const canvasRect = canvas.getElement().getBoundingClientRect();
+      setCropIconPosition({
+          top: tr.y - 14 + canvasRect.top + window.scrollY,
+          left: tr.x - 14 + canvasRect.left + window.scrollX,
+      });
+    } else {
+      setCropIconPosition(null);
+    }
+  }, []);
 
   const openCrop = useCallback((group: fabric.Group) => {
     const canvas = fabricCanvasRef.current;
@@ -148,6 +169,7 @@ export function LayoutCanvasClient() {
 
     flushSync(() => {
         setCropState({ group, image, overlay, originalImageState });
+        setCropIconPosition(null);
     });
     canvas.renderAll();
   }, []);
@@ -203,35 +225,6 @@ export function LayoutCanvasClient() {
 
 
   const initCanvas = useCallback(() => {
-    const cropIcon = new Image();
-    cropIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-crop'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E";
-
-    const renderCropIcon = (ctx: CanvasRenderingContext2D, left: number, top: number, styleOverride: any, fabricObject: fabric.Object) => {
-        ctx.save();
-        ctx.translate(left, top);
-        ctx.rotate(fabric.util.degreesToRadians(fabricObject.angle || 0));
-        ctx.drawImage(cropIcon, -12, -12, 24, 24);
-        ctx.restore();
-    };
-
-    const startCropping = (eventData: MouseEvent, transform: fabric.Transform) => {
-        const target = transform.target as fabric.Group;
-        if (!target || !target.data?.isCropGroup) return false;
-        openCrop(target);
-        return true;
-    };
-    
-    fabric.Object.prototype.controls.cropControl = new fabric.Control({
-        x: 0.5,
-        y: -0.5,
-        offsetX: 20,
-        offsetY: -20,
-        cursorStyle: 'pointer',
-        mouseUpHandler: startCropping,
-        render: renderCropIcon,
-        visible: false,
-    });
-
     const canvas = new fabric.Canvas(canvasRef.current, {
         width: canvasSize.width,
         height: canvasSize.height,
@@ -240,27 +233,18 @@ export function LayoutCanvasClient() {
         controlsAboveOverlay: true,
     });
     fabricCanvasRef.current = canvas;
-
-    const updateControlsVisibility = (target?: fabric.Object) => {
-      // Clear visibility for all objects
-      canvas.forEachObject(obj => {
-        if(obj.controls.cropControl) {
-          obj.controls.cropControl.visible = false;
-        }
-      });
-
-      if (target && target.data?.isCropGroup) {
-          target.controls.cropControl.visible = true;
-      }
-      canvas.requestRenderAll();
-    };
     
-    canvas.on('selection:created', (e) => updateControlsVisibility(e.target));
-    canvas.on('selection:updated', (e) => updateControlsVisibility(e.target));
-    canvas.on('selection:cleared', () => updateControlsVisibility());
+    canvas.on({
+        'selection:created': updateCropIconPosition,
+        'selection:updated': updateCropIconPosition,
+        'selection:cleared': updateCropIconPosition,
+        'object:moving': updateCropIconPosition,
+        'object:scaling': updateCropIconPosition,
+        'object:rotating': updateCropIconPosition,
+    });
     
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor, openCrop]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, updateCropIconPosition]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -285,8 +269,9 @@ export function LayoutCanvasClient() {
       }
       
       canvas.renderAll();
+      updateCropIconPosition();
     }
-  }, []);
+  }, [updateCropIconPosition]);
 
   useEffect(() => {
     let canvas: fabric.Canvas;
@@ -299,7 +284,9 @@ export function LayoutCanvasClient() {
         canvas.renderAll();
     }
 
-    const resizeObserver = new ResizeObserver(fitCanvasToContainer);
+    const resizeObserver = new ResizeObserver(() => {
+        fitCanvasToContainer();
+    });
     
     const wrapper = canvasWrapperRef.current;
     if (wrapper) {
@@ -479,11 +466,6 @@ export function LayoutCanvasClient() {
             evented: true,
             clipPath: seen_frame,
             data: { isCropGroup: true },
-            // This is the key change: ensure the control is part of the object
-            controls: {
-              ...fabric.Object.prototype.controls,
-              cropControl: fabric.Object.prototype.controls.cropControl
-            }
         });
 
         canvas.add(group);
@@ -582,6 +564,31 @@ export function LayoutCanvasClient() {
                 onCancel={cancelCrop}
               />
             )}
+             {cropIconPosition && (
+              <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant="default"
+                            size="icon"
+                            className="absolute z-10 w-7 h-7 rounded-full shadow-lg"
+                            style={{ ...cropIconPosition }}
+                            onClick={() => {
+                                const activeObject = fabricCanvasRef.current?.getActiveObject();
+                                if (activeObject && activeObject.data?.isCropGroup) {
+                                    openCrop(activeObject as fabric.Group);
+                                }
+                            }}
+                            >
+                            <Crop className="w-4 h-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                        <p>Crop Image</p>
+                    </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-background">
@@ -613,15 +620,6 @@ export function LayoutCanvasClient() {
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top"><p>Add Box</p></TooltipContent>
-                </Tooltip>
-                
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" disabled>
-                          <Crop />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top"><p>Select a box and click the crop icon</p></TooltipContent>
                 </Tooltip>
 
                 <div className="flex-grow" />
