@@ -230,7 +230,7 @@ export function LayoutCanvasClient() {
     fabric.Object.prototype.controls.cropControl = new fabric.Control({
         x: 0,
         y: -0.5,
-        offsetY: -30,
+        offsetY: -32,
         cursorStyle: 'pointer',
         mouseUpHandler: startCropping,
         render: renderCropIcon,
@@ -566,7 +566,7 @@ export function LayoutCanvasClient() {
                   </TooltipTrigger>
                   <TooltipContent side="top"><p>Select / Move (V)</p></TooltipContent>
                 </Tooltip>
-                
+
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
@@ -584,6 +584,15 @@ export function LayoutCanvasClient() {
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top"><p>Add Box</p></TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <Crop />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top"><p>Crop Image</p></TooltipContent>
                 </Tooltip>
 
                 <div className="flex-grow" />
