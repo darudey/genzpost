@@ -242,9 +242,7 @@ export function LayoutCanvasClient() {
         canvas.renderAll();
     }
 
-    const resizeObserver = new ResizeObserver(() => {
-        fitCanvasToContainer();
-    });
+    const resizeObserver = new ResizeObserver(fitCanvasToContainer);
     
     const currentCanvasWrapper = canvasWrapperRef.current;
     if (currentCanvasWrapper) {
@@ -254,9 +252,7 @@ export function LayoutCanvasClient() {
     fitCanvasToContainer();
     
     return () => {
-      if (currentCanvasWrapper) {
-        resizeObserver.unobserve(currentCanvasWrapper);
-      }
+      resizeObserver.disconnect();
     }
   }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
 
@@ -275,7 +271,7 @@ export function LayoutCanvasClient() {
             canvas.off('object:removed', handleRemoved);
         }
     };
-  }, [isCropMode, exitCropMode]);
+  }, [exitCropMode]);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
