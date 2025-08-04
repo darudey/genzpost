@@ -87,22 +87,27 @@ export function LayoutCanvasClient() {
 
     setIsCropMode(true);
     
-    // Deactivate all other objects
     canvas.discardActiveObject();
     
-    // Get the image from the group
     const image = targetGroup.getObjects('image')[0] as fabric.Image;
     
-    // Make the group itself not selectable, but allow events to pass through
     targetGroup.set({
         selectable: false,
-        evented: true, 
+        evented: false, 
     });
 
-    // Make the image active and selectable within the group context
     canvas.setActiveObject(image);
 
-    // Ensure the image controls are visible for scaling/rotating
+    image.set({
+      selectable: true,
+      evented: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockScalingX: false,
+      lockScalingY: false,
+      lockRotation: false,
+    });
+
     image.setControlsVisibility({
         mt: true, mb: true, ml: true, mr: true,
         bl: true, br: true, tl: true, tr: true,
@@ -118,18 +123,25 @@ export function LayoutCanvasClient() {
 
     const activeImage = canvas.getActiveObject() as fabric.Image;
     if (!activeImage || !activeImage.data?.group) {
-        setIsCropMode(false); // Failsafe
+        setIsCropMode(false); 
         canvas.renderAll();
         return;
     }
     
-    // Get the parent group from the image's data property
     const group = activeImage.data.group as fabric.Group;
+
+    activeImage.set({
+      selectable: false,
+      evented: false,
+      lockMovementX: true,
+      lockMovementY: true,
+      lockScalingX: true,
+      lockScalingY: true,
+      lockRotation: true,
+    });
     
-    // Make the group selectable again
     group.set({ selectable: true, evented: true });
     
-    // Deselect the image and select the parent group
     canvas.discardActiveObject();
     canvas.setActiveObject(group);
     
@@ -155,7 +167,6 @@ export function LayoutCanvasClient() {
       if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
         enterCropMode(opt.target as fabric.Group);
       } else if (isCropMode) {
-        // If we are in crop mode and the user clicks outside the image, exit.
         if (!opt.target || opt.target.type !== 'image') {
           exitCropMode();
         }
@@ -168,7 +179,7 @@ export function LayoutCanvasClient() {
 
         if (opt.target && opt.target.data?.isCropGroup && !isCropMode && timeSinceLastTap < 500 && lastTapTarget === opt.target) {
           enterCropMode(opt.target as fabric.Group);
-          lastTapTime = 0; // Reset tap time
+          lastTapTime = 0; 
           return;
         }
         lastTapTime = now;
@@ -256,7 +267,6 @@ export function LayoutCanvasClient() {
         const canvas = fabricCanvasRef.current;
         if (!canvas) return;
         
-        // Use the first box to determine overall scaling for the layout
         const detectedBoxes = result.boxes;
         const outerBoxX1 = Math.min(...detectedBoxes.map(b => b.x));
         const outerBoxY1 = Math.min(...detectedBoxes.map(b => b.y));
@@ -324,7 +334,9 @@ export function LayoutCanvasClient() {
             img.set({
               originX: 'center',
               originY: 'center',
-              data: { group }
+              data: { group },
+              selectable: false,
+              evented: false,
             });
             
             const frameWidth = seen_frame.width!;
@@ -360,7 +372,6 @@ export function LayoutCanvasClient() {
         fill: 'transparent',
         stroke: '#ccc',
         strokeWidth: 2,
-        // This is crucial for clipPath to work correctly on a group
         absolutePositioned: true, 
     });
 
@@ -368,6 +379,8 @@ export function LayoutCanvasClient() {
         img.set({
             originX: 'center',
             originY: 'center',
+            selectable: false,
+            evented: false,
         });
         
         const scale = Math.max(rectWidth / img.width!, rectHeight / img.height!);
@@ -381,7 +394,6 @@ export function LayoutCanvasClient() {
             data: { isCropGroup: true },
         });
 
-        // Set references for later
         img.data = { group };
 
         canvas.add(group);
@@ -422,7 +434,6 @@ export function LayoutCanvasClient() {
 
     if (isCropMode) exitCropMode();
     
-    // Deselect all objects before exporting
     canvas.discardActiveObject();
     canvas.renderAll();
     
