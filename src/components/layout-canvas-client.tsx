@@ -51,7 +51,6 @@ import {
 } from "lucide-react";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
-import { createCropOverlay } from "@/lib/crop-overlay";
 import { FloatingCropBar } from "@/components/ui/floating-crop-bar";
 
 type CanvasSize = { width: number; height: number };
@@ -64,6 +63,12 @@ const INITIAL_CANVAS_SIZES: CanvasSizeMap = {
 export function LayoutCanvasClient() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
+  const cropSessionRef = useRef<{
+    group: fabric.Group;
+    frame: fabric.Rect;
+    tempImg: fabric.Image;
+    overlay: fabric.Rect;
+  } | null>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -81,17 +86,11 @@ export function LayoutCanvasClient() {
   
   const canvasSize = canvasSizes[currentSizeKey];
   
-  const [cropState, setCropState] = useState<{
-    group: fabric.Group;
-    image: fabric.Image;
-    overlay: fabric.Rect;
-    originalImageState: any;
-  } | null>(null);
   const [cropIconPosition, setCropIconPosition] = useState<{top: number, left: number} | null>(null);
 
   const updateCropIconPosition = useCallback(() => {
     const canvas = fabricCanvasRef.current;
-    if (!canvas || cropState) {
+    if (!canvas || cropSessionRef.current) {
       setCropIconPosition(null);
       return;
     }
@@ -111,144 +110,82 @@ export function LayoutCanvasClient() {
     } else {
       setCropIconPosition(null);
     }
-  }, [cropState]);
+  }, []);
 
-  const confirmCrop = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!cropState || !canvas) return;
+  /* --- ENTER CROP MODE --- */
+  function openCrop(group: fabric.Group) {
+    const canvas = fabricCanvasRef.current!;
+    const image   = group.getObjects('image')[0] as fabric.Image;
+    const frame   = group.getObjects('rect')[0] as fabric.Rect;
 
-    canvas.off('mouse:wheel');
-    const { group, image, overlay } = cropState;
+    group.visible = false;
 
-    const frame = group.getObjects('rect')[0] as fabric.Rect;
-
-    const frameWidth = frame.width! * (frame.scaleX || 1);
-    const frameHeight = frame.height! * (frame.scaleY || 1);
-    const scale = Math.max(frameWidth / image.width!, frameHeight / image.height!);
-
-    image.set({
-        scaleX: scale,
-        scaleY: scale,
-        left: (frameWidth - image.width! * scale) / 2,
-        top: (frameHeight - image.height! * scale) / 2,
-        angle: 0,
-        selectable: false,
-        evented: false,
-        hasControls: false,
-    });
-  
-    group.addWithUpdate();
-    canvas.remove(overlay);
-    
-    canvas.getObjects().forEach(obj => {
-      obj.set({ selectable: true, evented: true });
-    });
-    
-    flushSync(() => setCropState(null));
-    canvas.setActiveObject(group);
-    canvas.renderAll();
-  }, [cropState]);
-  
-  const cancelCrop = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!cropState || !canvas) return;
-  
-    canvas.off('mouse:wheel');
-    const { group, image, overlay, originalImageState } = cropState;
-  
-    image.set(originalImageState);
-    image.set({
-      selectable: false,
-      evented: false,
-      hasControls: false,
-    });
-  
-    group.addWithUpdate();
-    canvas.remove(overlay);
-
-    canvas.getObjects().forEach(obj => {
-      obj.set({ selectable: true, evented: true });
-    });
-    
-    flushSync(() => setCropState(null));
-    canvas.setActiveObject(group);
-    canvas.renderAll();
-  }, [cropState]);
-
-  const openCrop = useCallback((group: fabric.Group) => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !group) return;
-
-    if (cropState) {
-        cancelCrop();
-    }
-
-    const image = group.getObjects('image')[0] as fabric.Image;
-    if (!image) return;
-  
-    const frame = group.getObjects('rect')[0] as fabric.Rect;
-    const { overlay } = createCropOverlay(canvas, frame);
-  
-    canvas.discardActiveObject();
-    canvas.add(overlay);
-    
-    const originalImageState = {
-      left: image.left,
-      top: image.top,
-      scaleX: image.scaleX,
-      scaleY: image.scaleY,
-      angle: image.angle,
-    };
-  
-    image.set({
+    const tempImg = image.clone() as fabric.Image;
+    tempImg.set({
       selectable: true,
       evented: true,
-      lockMovementX: false,
-      lockMovementY: false,
-      lockScalingX: false,
-      lockScalingY: false,
-      lockRotation: false,
-      lockUniScaling: true, 
-      hasControls: true,
-      cornerColor: '#fff',
+      lockRotation: true,
       cornerSize: 12,
+      cornerColor: '#fff',
       transparentCorners: false,
     });
-  
-    group.bringToFront();
-    image.bringToFront();
-    canvas.setActiveObject(image);
-    
-    canvas.getObjects().forEach(obj => {
-        if (obj !== group && obj !== overlay) {
-            obj.set({ selectable: false, evented: false });
-        }
+    canvas.add(tempImg);
+
+    const { overlay } = createCropOverlay(canvas, frame);
+    canvas.add(overlay);
+
+    cropSessionRef.current = { group, frame, tempImg, overlay };
+    // We must manually trigger a re-render to show the floating bar
+    setCropIconPosition(null); 
+  }
+
+  /* --- FINISH CROP --- */
+  function finishCrop() {
+    if (!cropSessionRef.current) return;
+    const { group, frame, tempImg, overlay } = cropSessionRef.current;
+    const canvas = fabricCanvasRef.current!;
+
+    const cropRect = tempImg.getBoundingRect(true);
+    const frameRect = frame.getBoundingRect(true);
+
+    const cropped = new fabric.Image(tempImg.getElement(), {
+      cropX: cropRect.left - frameRect.left,
+      cropY: cropRect.top  - frameRect.top,
+      cropWidth:  Math.min(frameRect.width,  cropRect.width),
+      cropHeight: Math.min(frameRect.height, cropRect.height),
+      scaleX: frameRect.width  / cropRect.width,
+      scaleY: frameRect.height / cropRect.height,
+      left: frame.left,
+      top:  frame.top,
+      selectable: false,
+      evented: false,
     });
 
-    const handleMouseWheel = (opt: fabric.IEvent<WheelEvent>) => {
-        opt.e.preventDefault();
-        opt.e.stopPropagation();
+    group.remove(group.getObjects('image')[0]);
+    group.addWithUpdate(cropped);
+    group.visible = true;
 
-        const target = canvas.getActiveObject();
-        if (!target || target !== image) return;
-    
-        const delta = opt.e.deltaY;
-        let zoom = target.scaleX || 1;
-        zoom *= 0.999 ** delta;
-    
-        target.scale(zoom);
-        canvas.requestRenderAll();
-    };
-    canvas.on('mouse:wheel', handleMouseWheel);
-
-    flushSync(() => {
-        setCropState({ group, image, overlay, originalImageState });
-        setCropIconPosition(null);
-    });
+    canvas.remove(tempImg, overlay);
+    cropSessionRef.current = null;
+    canvas.setActiveObject(group);
     canvas.renderAll();
-  }, [cropState, cancelCrop]);
+    // We must manually trigger a re-render to hide the floating bar
+    updateCropIconPosition();
+  }
 
-
+  /* --- CANCEL CROP --- */
+  function cancelCrop() {
+    if (!cropSessionRef.current) return;
+    const { group, tempImg, overlay } = cropSessionRef.current;
+    group.visible = true;
+    fabricCanvasRef.current!.remove(tempImg, overlay);
+    cropSessionRef.current = null;
+    fabricCanvasRef.current!.setActiveObject(group);
+    fabricCanvasRef.current!.renderAll();
+    // We must manually trigger a re-render to hide the floating bar
+    updateCropIconPosition();
+  }
+  
   const initCanvas = useCallback(() => {
     const canvas = new fabric.Canvas(canvasRef.current, {
         width: canvasSize.width,
@@ -267,14 +204,14 @@ export function LayoutCanvasClient() {
         'object:scaling': updateCropIconPosition,
         'object:rotating': updateCropIconPosition,
         'object:removed': (opt) => {
-            if (cropState && opt.target === cropState.group) {
+            if (cropSessionRef.current && opt.target === cropSessionRef.current.group) {
                 flushSync(() => cancelCrop());
             }
         },
     });
     
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor, updateCropIconPosition, cancelCrop, cropState]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, updateCropIconPosition]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -339,7 +276,7 @@ export function LayoutCanvasClient() {
     if (!canvas) return;
   
     const handleRemoved = (opt: { target?: fabric.Object }) => {
-      if (cropState && opt.target === cropState.group) {
+      if (cropSessionRef.current && opt.target === cropSessionRef.current.group) {
         flushSync(() => {
           cancelCrop();
         });
@@ -349,7 +286,7 @@ export function LayoutCanvasClient() {
     return () => {
       canvas.off('object:removed', handleRemoved);
     };
-  }, [cropState, cancelCrop]);
+  }, [cancelCrop]);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -535,7 +472,7 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
     
-    if(cropState) {
+    if(cropSessionRef.current) {
         toast({ title: "Please finish cropping first", variant: "destructive" });
         return;
     }
@@ -589,9 +526,9 @@ export function LayoutCanvasClient() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center relative">
             <canvas ref={canvasRef} className="shadow-2xl" style={{boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'}} />
-             {cropState && (
+             {cropSessionRef.current && (
               <FloatingCropBar
-                onDone={confirmCrop}
+                onDone={finishCrop}
                 onCancel={cancelCrop}
               />
             )}
@@ -716,7 +653,7 @@ export function LayoutCanvasClient() {
                 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={isAiProcessing || !!cropState} onClick={() => imageInputRef.current?.click()}>
+                        <Button variant="ghost" size="icon" disabled={isAiProcessing || !!cropSessionRef.current} onClick={() => imageInputRef.current?.click()}>
                             {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
                         </Button>
                     </TooltipTrigger>
@@ -807,3 +744,29 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+function createCropOverlay(canvas: fabric.Canvas, frame: fabric.Rect) {
+  const overlay = new fabric.Rect({
+    left: 0,
+    top: 0,
+    width: canvas.width!,
+    height: canvas.height!,
+    fill: 'rgba(0,0,0,.55)',
+    selectable: false,
+    evented: false,
+  });
+
+  const clip = new fabric.Rect({
+    left: frame.left,
+    top: frame.top,
+    width: frame.width! * frame.scaleX!,
+    height: frame.height! * frame.scaleY!,
+    angle: frame.angle ?? 0,
+    absolutePositioned: true,
+  });
+  overlay.clipPath = clip;
+
+  return { overlay };
+}
+
+    
