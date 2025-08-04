@@ -91,13 +91,36 @@ export function LayoutCanvasClient() {
     const seen_frame = targetGroup.getObjects('rect')[0] as fabric.Rect;
     const unseen_frame = targetGroup.getObjects('image')[0] as fabric.Image;
     
+    // Make the group non-interactive so it doesn't interfere
     targetGroup.set({ selectable: false, evented: false });
     
+    // The seen_frame is just a visual boundary, not interactive
     seen_frame.set({ evented: false });
-    unseen_frame.set({ evented: true, selectable: true });
     
+    // The unseen_frame is what we want to manipulate
+    unseen_frame.set({ 
+      evented: true, 
+      selectable: true,
+      lockMovementX: false,
+      lockMovementY: false,
+    });
+    
+    // Add the image to the canvas temporarily to make it the active object
     canvas.add(unseen_frame);
     canvas.setActiveObject(unseen_frame);
+
+    // Ensure all transform controls are visible
+    unseen_frame.setControlsVisibility({
+        mt: true, // middle top
+        mb: true, // middle bottom
+        ml: true, // middle left
+        mr: true, // middle right
+        bl: true, // bottom left
+        br: true, // bottom right
+        tl: true, // top left
+        tr: true, // top right
+        mtr: true // rotation
+    });
 
     canvas.renderAll();
   }
