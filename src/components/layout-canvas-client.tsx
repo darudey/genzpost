@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { flushSync } from "react-dom";
 import type { ChangeEvent } from "react";
 import { fabric } from 'fabric';
 import { Button } from "@/components/ui/button";
@@ -262,7 +263,9 @@ export function LayoutCanvasClient() {
 
     const handleRemoved = (opt: { target?: fabric.Object }) => {
       if (opt.target === croppingGroupRef.current) {
-        exitCropMode();
+        flushSync(() => {
+          exitCropMode();
+        });
       }
     };
     canvas.on('object:removed', handleRemoved);
@@ -705,3 +708,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
