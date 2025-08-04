@@ -778,5 +778,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
-    
