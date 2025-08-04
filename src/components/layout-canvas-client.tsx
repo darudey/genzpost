@@ -52,12 +52,12 @@ import {
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
 
-const INITIAL_CANVAS_SIZES = {
+type CanvasSize = { width: number; height: number };
+type CanvasSizeMap = Record<string, CanvasSize>;
+
+const INITIAL_CANVAS_SIZES: CanvasSizeMap = {
     "400x600": { width: 400, height: 600 },
 };
-
-type CanvasSizeKey = keyof typeof INITIAL_CANVAS_SIZES;
-
 
 export function LayoutCanvasClient() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,15 +71,15 @@ export function LayoutCanvasClient() {
 
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [canvasSizes, setCanvasSizes] = useState(INITIAL_CANVAS_SIZES);
-  const [currentSizeKey, setCurrentSizeKey] = useState<string>("400x600");
+  const [canvasSizes, setCanvasSizes] = useState<CanvasSizeMap>(INITIAL_CANVAS_SIZES);
+  const [currentSizeKey, setCurrentSizeKey] = useState<keyof typeof canvasSizes>("400x600");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
   const [newSize, setNewSize] = useState({ width: "", height: "" });
   const [isCropMode, setIsCropMode] = useState(false);
   
-  const canvasSize = canvasSizes[currentSizeKey as CanvasSizeKey];
+  const canvasSize = canvasSizes[currentSizeKey];
 
   const enterCropMode = useCallback((targetGroup: fabric.Group) => {
     const canvas = fabricCanvasRef.current;
@@ -240,13 +240,13 @@ export function LayoutCanvasClient() {
     const resizeObserver = new ResizeObserver(() => {
         fitCanvasToContainer();
     });
-    if (canvasWrapperRef.current) {
-        resizeObserver.observe(canvasWrapperRef.current);
+    const canvasWrapper = canvasWrapperRef.current;
+    if (canvasWrapper) {
+        resizeObserver.observe(canvasWrapper);
     }
     
     fitCanvasToContainer();
     
-    const canvasWrapper = canvasWrapperRef.current;
     return () => {
       if (canvasWrapper) {
         resizeObserver.unobserve(canvasWrapper);
@@ -457,7 +457,7 @@ export function LayoutCanvasClient() {
     const height = parseInt(newSize.height);
     if (width > 0 && height > 0) {
       const key = `${width}x${height}`;
-      if (!tempSizes[key as CanvasSizeKey]) {
+      if (!tempSizes[key]) {
         setTempSizes(prev => ({ ...prev, [key]: { width, height } }));
         setNewSize({ width: "", height: "" });
       } else {
@@ -474,13 +474,13 @@ export function LayoutCanvasClient() {
       return;
     }
     const newSizes = { ...tempSizes };
-    delete newSizes[keyToDelete as CanvasSizeKey];
+    delete newSizes[keyToDelete];
     setTempSizes(newSizes);
   };
 
   const handleSaveSizes = () => {
     setCanvasSizes(tempSizes);
-    if (!tempSizes[currentSizeKey as CanvasSizeKey]) {
+    if (!tempSizes[currentSizeKey]) {
       setCurrentSizeKey(Object.keys(tempSizes)[0]);
     }
     setIsEditSizesOpen(false);
