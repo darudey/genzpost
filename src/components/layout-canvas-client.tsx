@@ -114,6 +114,7 @@ export function LayoutCanvasClient() {
 
   /* --- ENTER CROP MODE --- */
   function openCrop(group: fabric.Group) {
+    if (cropSessionRef.current) return;
     const canvas = fabricCanvasRef.current!;
     const image = group.getObjects().find(obj => obj.name === 'image') as fabric.Image | undefined;
     
@@ -123,12 +124,13 @@ export function LayoutCanvasClient() {
     }
 
     const frame = group.getObjects('rect')[0] as fabric.Rect;
-
     group.visible = false;
 
     image.clone((clonedImg: fabric.Image) => {
         const tempImg = clonedImg;
         tempImg.set({
+            left: group.left! + image.left!,
+            top: group.top! + image.top!,
             selectable: true,
             evented: true,
             lockRotation: true,
@@ -136,14 +138,19 @@ export function LayoutCanvasClient() {
             cornerColor: '#fff',
             transparentCorners: false,
         });
+
         canvas.add(tempImg);
+        tempImg.bringToFront();
 
         const { overlay } = createCropOverlay(canvas, frame);
         canvas.add(overlay);
 
+        canvas.setActiveObject(tempImg);
+
         cropSessionRef.current = { group, frame, tempImg, overlay };
+        
         // We must manually trigger a re-render to show the floating bar
-        setCropIconPosition(null);
+        updateCropIconPosition(); 
     });
   }
 
@@ -155,19 +162,21 @@ export function LayoutCanvasClient() {
 
     const cropRect = tempImg.getBoundingRect(true);
     const frameRect = frame.getBoundingRect(true);
-
-    const cropped = new fabric.Image(tempImg.getElement(), {
-      cropX: cropRect.left - frameRect.left,
-      cropY: cropRect.top  - frameRect.top,
-      width: frameRect.width,
-      height: frameRect.height,
-      scaleX: frameRect.width / cropRect.width,
-      scaleY: frameRect.height / cropRect.height,
-      left: frame.left,
-      top:  frame.top,
+    
+    const newImage = new fabric.Image(tempImg.getElement(), {
+      cropX: frameRect.left - cropRect.left,
+      cropY: frameRect.top  - cropRect.top,
+      width: frameRect.width / tempImg.scaleX!,
+      height: frameRect.height / tempImg.scaleY!,
+      scaleX: tempImg.scaleX,
+      scaleY: tempImg.scaleY,
+      left: 0,
+      top:  0,
+      name: 'image',
+      originX: 'center',
+      originY: 'center',
       selectable: false,
       evented: false,
-      name: 'image',
     });
     
     const oldImage = group.getObjects().find(o => o.name === 'image');
@@ -175,7 +184,11 @@ export function LayoutCanvasClient() {
         group.remove(oldImage);
     }
 
-    group.addWithUpdate(cropped);
+    group.addWithUpdate(newImage);
+    group.set({
+        left: frameRect.left,
+        top: frameRect.top
+    });
     group.visible = true;
 
     canvas.remove(tempImg, overlay);
@@ -781,3 +794,5 @@ function createCropOverlay(canvas: fabric.Canvas, frame: fabric.Rect) {
 
   return { overlay };
 }
+
+    
