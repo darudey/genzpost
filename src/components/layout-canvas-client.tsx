@@ -150,7 +150,7 @@ export function LayoutCanvasClient() {
         setCropState({ group, image, overlay, originalImageState });
     });
     canvas.renderAll();
-  }, [toast]);
+  }, []);
 
   const confirmCrop = useCallback(() => {
     if (!cropState) return;
@@ -222,12 +222,14 @@ export function LayoutCanvasClient() {
     };
     
     fabric.Object.prototype.controls.cropControl = new fabric.Control({
-        x: 0,
+        x: 0.5,
         y: -0.5,
-        offsetY: -32,
+        offsetX: 20,
+        offsetY: -20,
         cursorStyle: 'pointer',
         mouseUpHandler: startCropping,
         render: renderCropIcon,
+        visible: false,
     });
 
     const canvas = new fabric.Canvas(canvasRef.current, {
@@ -240,13 +242,22 @@ export function LayoutCanvasClient() {
     fabricCanvasRef.current = canvas;
 
     const updateControlsVisibility = (target?: fabric.Object) => {
-        if (target && target.data?.isCropGroup) {
-            target.controls.cropControl.visible = true;
+      // Clear visibility for all objects
+      canvas.forEachObject(obj => {
+        if(obj.controls.cropControl) {
+          obj.controls.cropControl.visible = false;
         }
+      });
+
+      if (target && target.data?.isCropGroup) {
+          target.controls.cropControl.visible = true;
+      }
+      canvas.requestRenderAll();
     };
     
     canvas.on('selection:created', (e) => updateControlsVisibility(e.target));
     canvas.on('selection:updated', (e) => updateControlsVisibility(e.target));
+    canvas.on('selection:cleared', () => updateControlsVisibility());
     
     return canvas;
   }, [canvasSize.width, canvasSize.height, canvasBgColor, openCrop]);
@@ -468,7 +479,11 @@ export function LayoutCanvasClient() {
             evented: true,
             clipPath: seen_frame,
             data: { isCropGroup: true },
-            controls: { ...fabric.Group.prototype.controls, cropControl: new fabric.Control({visible: false}) }
+            // This is the key change: ensure the control is part of the object
+            controls: {
+              ...fabric.Object.prototype.controls,
+              cropControl: fabric.Object.prototype.controls.cropControl
+            }
         });
 
         canvas.add(group);
