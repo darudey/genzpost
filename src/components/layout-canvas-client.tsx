@@ -1,8 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import type { ChangeEvent } from "react";
+import { useState, useRef, useEffect, useCallback, type ChangeEvent } from "react";
 import { fabric } from 'fabric';
 import { flushSync } from 'react-dom';
 import { Button } from "@/components/ui/button";
@@ -90,10 +89,9 @@ export function LayoutCanvasClient() {
   } | null>(null);
   const [cropIconPosition, setCropIconPosition] = useState<{top: number, left: number} | null>(null);
 
-
   const updateCropIconPosition = useCallback(() => {
     const canvas = fabricCanvasRef.current;
-    if (!canvas) {
+    if (!canvas || cropState) {
       setCropIconPosition(null);
       return;
     }
@@ -108,7 +106,7 @@ export function LayoutCanvasClient() {
     } else {
       setCropIconPosition(null);
     }
-  }, []);
+  }, [cropState]);
 
   const openCrop = useCallback((group: fabric.Group) => {
     const canvas = fabricCanvasRef.current;
@@ -242,9 +240,17 @@ export function LayoutCanvasClient() {
         'object:scaling': updateCropIconPosition,
         'object:rotating': updateCropIconPosition,
     });
+
+    canvas.on('object:removed', (opt) => {
+      if (cropState && opt.target === cropState.group) {
+        flushSync(() => {
+          cancelCrop();
+        });
+      }
+    });
     
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor, updateCropIconPosition]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, updateCropIconPosition, cancelCrop, cropState]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -284,9 +290,7 @@ export function LayoutCanvasClient() {
         canvas.renderAll();
     }
 
-    const resizeObserver = new ResizeObserver(() => {
-        fitCanvasToContainer();
-    });
+    const resizeObserver = new ResizeObserver(fitCanvasToContainer);
     
     const wrapper = canvasWrapperRef.current;
     if (wrapper) {
@@ -554,7 +558,7 @@ export function LayoutCanvasClient() {
   };
   
   return (
-    <div className="flex flex-col h-full bg-gray-800 text-foreground font-body">
+    <div className="flex flex-col h-full bg-muted/10 text-foreground font-body">
       <div className="flex flex-col flex-1 overflow-hidden">
         <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center relative">
             <canvas ref={canvasRef} className="shadow-2xl" style={{boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'}} />

@@ -19,29 +19,19 @@ export function createCropOverlay(
   });
 
   // “hole” that lets the image shine through
-  const clip = new fabric.Rect({
-    left,
-    top,
-    width,
-    height,
-    absolutePositioned: true,
-  });
-  
   // A slight issue with clipPath is that it's relative to the object's center.
   // We need to invert the transformation of the overlay to make the clip path's coordinates absolute.
   const invertedMatrix = fabric.util.invertTransform(overlay.calcTransformMatrix());
-  const transformedPoint = fabric.util.transformPoint({x: clip.left!, y: clip.top!} as fabric.Point, invertedMatrix);
+  const transformedPoint = fabric.util.transformPoint({x: left, y: top} as fabric.Point, invertedMatrix);
 
   const clipRect = new fabric.Rect({
       left: transformedPoint.x,
       top: transformedPoint.y,
-      width: clip.width,
-      height: clip.height,
+      width: width,
+      height: height,
   });
   
   overlay.clipPath = clipRect;
 
   return { overlay };
 }
-
-    

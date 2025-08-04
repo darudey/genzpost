@@ -38,7 +38,7 @@ export function FloatingCropBar({
       </Button>
       <Button
         onClick={onDone}
-        className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg"
+        className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg"
       >
         Done
       </Button>
@@ -46,5 +46,3 @@ export function FloatingCropBar({
     document.body
   );
 }
-
-    
