@@ -49,7 +49,6 @@ import {
   Settings,
   CheckSquare,
 } from "lucide-react";
-import { autoBackgroundFill } from "@/ai/flows/auto-background-fill";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
 
@@ -67,6 +66,7 @@ export function LayoutCanvasClient() {
   const colorInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
+  const croppingGroupRef = useRef<fabric.Group | null>(null);
   const { toast } = useToast();
 
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
@@ -86,20 +86,17 @@ export function LayoutCanvasClient() {
     if (!canvas || !targetGroup.data?.isCropGroup) return;
 
     setIsCropMode(true);
+    croppingGroupRef.current = targetGroup;
 
-    // Deselect everything
     canvas.discardActiveObject();
 
-    // Get the image (unseen_frame) from the group
     const image = targetGroup.getObjects('image')[0] as fabric.Image;
 
-    // Make group not selectable during crop
     targetGroup.set({
       selectable: false,
       evented: false,
     });
 
-    // Enable full image editing (move, scale, rotate)
     image.set({
       selectable: true,
       evented: true,
@@ -110,14 +107,12 @@ export function LayoutCanvasClient() {
       lockRotation: false,
     });
 
-    // Show control handles (corners, edges, rotate)
     image.setControlsVisibility({
       tl: true, tr: true, bl: true, br: true,
       mt: true, mb: true, ml: true, mr: true,
       mtr: true,
     });
 
-    // Set active object and disable background selection
     canvas.setActiveObject(image);
     canvas.selection = false;
 
@@ -128,44 +123,34 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
-    // Find the group that was being edited.
-    // It's the group that has an image whose group property is set.
-    const activeImage = canvas.getObjects('image').find(obj => (obj as fabric.Image).data?.group) as fabric.Image;
-    if (!activeImage || !activeImage.data?.group) {
-        setIsCropMode(false);
-        canvas.selection = true;
-        canvas.renderAll();
-        return;
-    }
-
-    const group = activeImage.data.group as fabric.Group;
-
-    // Lock image again
-    activeImage.set({
-      selectable: false,
-      evented: false,
-      lockMovementX: true,
-      lockMovementY: true,
-      lockScalingX: true,
-      lockScalingY: true,
-      lockRotation: true,
-    });
-
-    // Make group selectable again
-    group.set({
-      selectable: true,
-      evented: true,
-    });
+    const group = croppingGroupRef.current;
     
-    // Cleanup reference
-    delete activeImage.data.group;
+    if (group) {
+      const image = group.getObjects('image')[0] as fabric.Image;
+      if (image) {
+        image.set({
+          selectable: false,
+          evented: false,
+          lockMovementX: true,
+          lockMovementY: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockRotation: true,
+        });
+      }
 
-    // Reattach controls to group
-    canvas.discardActiveObject();
-    canvas.setActiveObject(group);
+      group.set({
+        selectable: true,
+        evented: true,
+      });
+
+      canvas.discardActiveObject();
+      canvas.setActiveObject(group);
+    }
+    
     canvas.selection = true;
-
     setIsCropMode(false);
+    croppingGroupRef.current = null;
     canvas.renderAll();
   };
 
