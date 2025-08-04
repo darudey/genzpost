@@ -5,7 +5,7 @@ export function createCropOverlay(
   canvas: fabric.Canvas,
   frame: fabric.Rect   // the visible white stroke
 ) {
-  const { left, top, width, height } = frame.getBoundingRect(true);
+  const { left, top, width, height } = frame.getBoundingRect();
 
   // dark backdrop
   const overlay = new fabric.Rect({
