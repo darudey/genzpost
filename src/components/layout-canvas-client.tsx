@@ -48,7 +48,7 @@ import {
   PlusSquare,
   RectangleHorizontal,
   Settings,
-  CheckSquare,
+  Crop,
 } from "lucide-react";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +61,13 @@ const INITIAL_CANVAS_SIZES: CanvasSizeMap = {
     "400x600": { width: 400, height: 600 },
 };
 
+// Helper function to render a Lucide icon as an SVG string
+const renderIcon = (icon: any, options: any = {}) => {
+  const Icon = icon;
+  const { size = 24, color = 'black' } = options;
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${new Icon(options).render().props.children}</svg>`)}`;
+};
+
 export function LayoutCanvasClient() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
@@ -68,7 +75,6 @@ export function LayoutCanvasClient() {
   const colorInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
-  const croppingGroupRef = useRef<fabric.Group | null>(null);
   const { toast } = useToast();
 
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
@@ -79,87 +85,32 @@ export function LayoutCanvasClient() {
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
   const [newSize, setNewSize] = useState({ width: "", height: "" });
-  const [isCropMode, setIsCropMode] = useState(false);
   
   const canvasSize = canvasSizes[currentSizeKey];
 
-  const enterCropMode = useCallback((targetGroup: fabric.Group) => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !targetGroup.data?.isCropGroup) return;
+  const initCanvas = useCallback(() => {
+    // Custom Crop control
+    const cropIcon = new Image();
+    cropIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-crop'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E";
 
-    setIsCropMode(true);
-    croppingGroupRef.current = targetGroup;
-
-    canvas.discardActiveObject();
-
-    const image = targetGroup.getObjects('image')[0] as fabric.Image;
-
-    targetGroup.set({
-      selectable: false,
-      evented: false,
-    });
-
-    image.set({
-      selectable: true,
-      evented: true,
-      lockMovementX: false,
-      lockMovementY: false,
-      lockScalingX: false,
-      lockScalingY: false,
-      lockRotation: false,
-    });
-
-    image.setControlsVisibility({
-      tl: true, tr: true, bl: true, br: true,
-      mt: true, mb: true, ml: true, mr: true,
-      mtr: true,
-    });
-
-    canvas.setActiveObject(image);
-    canvas.selection = false;
-
-    canvas.renderAll();
-  }, []);
-
-  const exitCropMode = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    const group = croppingGroupRef.current;
-    if (!canvas || !group) {
-        setIsCropMode(false);
-        croppingGroupRef.current = null;
-        if(canvas) canvas.selection = true;
-        return;
+    const renderCropIcon = (ctx: CanvasRenderingContext2D, left: number, top: number, styleOverride: any, fabricObject: fabric.Object) => {
+        ctx.save();
+        ctx.translate(left, top);
+        ctx.rotate(fabric.util.degreesToRadians(fabricObject.angle || 0));
+        ctx.drawImage(cropIcon, -12, -12, 24, 24);
+        ctx.restore();
     };
 
-    const image = group.getObjects('image')[0] as fabric.Image;
-    if (image) {
-        image.set({
-            selectable: false,
-            evented: false,
-            lockMovementX: true,
-            lockMovementY: true,
-            lockScalingX: true,
-            lockScalingY: true,
-            lockRotation: true,
-        });
-    }
-
-    group.set({
-        selectable: true,
-        evented: true,
+    fabric.Object.prototype.controls.cropControl = new fabric.Control({
+        x: 0,
+        y: -0.5,
+        offsetY: -30,
+        cursorStyle: 'pointer',
+        mouseUpHandler: startCropping,
+        render: renderCropIcon,
     });
 
-    canvas.discardActiveObject();
-    canvas.setActiveObject(group);
-    
-    canvas.selection = true;
-    setIsCropMode(false);
-    croppingGroupRef.current = null;
-    canvas.renderAll();
-  }, []);
 
-
-  const initCanvas = useCallback(() => {
     const canvas = new fabric.Canvas(canvasRef.current, {
         width: canvasSize.width,
         height: canvasSize.height,
@@ -168,43 +119,169 @@ export function LayoutCanvasClient() {
         controlsAboveOverlay: true,
     });
     fabricCanvasRef.current = canvas;
-    
-    // Desktop: double click to enter crop mode
-    canvas.on('mouse:dblclick', (opt) => {
-      if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
-        enterCropMode(opt.target as fabric.Group);
-      }
-    });
-    
-    // Mobile: double tap to enter crop mode
-    let lastTapTime = 0;
-    let lastTapTarget: fabric.Object | undefined;
-    
-    canvas.on('mouse:down', (opt) => {
-      // This is the main event handler for taps and clicks
-      if (isCropMode) {
-        // If we are in crop mode, we only want to interact with the active image.
-        // If the user clicks anywhere else, we do nothing. This prevents
-        // the image from being deselected and exiting crop mode accidentally.
-        if (opt.target !== canvas.getActiveObject()) {
-          return;
+
+    canvas.on('selection:created', (e) => {
+        if (e.target && e.target.data?.isCropGroup) {
+            e.target.controls.cropControl.visible = true;
         }
-      }
-      
-      const currentTime = new Date().getTime();
-      const timeSinceLastTap = currentTime - lastTapTime;
-
-      if (timeSinceLastTap < 300 && opt.target === lastTapTarget && opt.target && opt.target.data?.isCropGroup) {
-        // Double tap detected on a group, enter crop mode.
-        enterCropMode(opt.target as fabric.Group);
-      }
-
-      lastTapTime = currentTime;
-      lastTapTarget = opt.target;
     });
 
+    canvas.on('selection:updated', (e) => {
+        if (e.target && e.target.data?.isCropGroup) {
+            e.target.controls.cropControl.visible = true;
+        }
+    });
+    
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor, isCropMode, enterCropMode, exitCropMode]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor]);
+
+
+  function startCropping(eventData: MouseEvent, transform: fabric.Transform) {
+      const target = transform.target as fabric.Group;
+      const canvas = fabricCanvasRef.current;
+      if (!canvas || !target || !target.data?.isCropGroup) return false;
+
+      // Hide all other objects and controls
+      canvas.getObjects().forEach(obj => {
+          if (obj !== target) {
+              obj.set({ visible: false });
+          }
+      });
+      target.set({ controls: {} }); // Hide default controls
+
+      // Create semi-transparent overlay
+      const overlay = new fabric.Rect({
+          left: 0,
+          top: 0,
+          width: canvas.width!,
+          height: canvas.height!,
+          fill: 'rgba(0,0,0,0.7)',
+          selectable: false,
+          evented: false,
+          data: { isCropOverlay: true }
+      });
+      canvas.add(overlay);
+      overlay.sendToBack();
+      target.bringToFront();
+
+
+      const image = target.getObjects('image')[0] as fabric.Image;
+      const frame = target.getObjects('rect')[0] as fabric.Rect;
+
+      // Clone image to show original state
+      const originalImageState = {
+        left: image.left,
+        top: image.top,
+        scaleX: image.scaleX,
+        scaleY: image.scaleY,
+      };
+
+      image.set({
+          selectable: true,
+          evented: true,
+          lockMovementX: false,
+          lockMovementY: false,
+          lockScalingX: false,
+          lockScalingY: false,
+          lockRotation: false,
+          hasControls: true,
+      });
+
+      canvas.setActiveObject(image);
+
+      const commitCrop = () => {
+          // Re-lock image
+          image.set({ selectable: false, evented: false });
+          target.setCoords(); // Update group coordinates
+
+          // Cleanup
+          canvas.remove(overlay);
+          canvas.getObjects().forEach(obj => obj.set({ visible: true }));
+          canvas.discardActiveObject();
+          canvas.setActiveObject(target);
+          target.controls.cropControl.visible = true;
+          canvas.renderAll();
+          window.removeEventListener('keydown', keydownHandler);
+      };
+
+      const cancelCrop = () => {
+          // Restore original image state
+          image.set(originalImageState);
+          image.setCoords();
+          
+          // Re-lock image
+          image.set({ selectable: false, evented: false });
+          target.setCoords(); // Update group coordinates
+
+          // Cleanup
+          canvas.remove(overlay);
+          canvas.getObjects().forEach(obj => obj.set({ visible: true }));
+          canvas.discardActiveObject();
+          canvas.setActiveObject(target);
+          target.controls.cropControl.visible = true;
+          canvas.renderAll();
+          window.removeEventListener('keydown', keydownHandler);
+      };
+
+      const keydownHandler = (e: KeyboardEvent) => {
+          if (e.key === 'Enter') {
+              commitCrop();
+          } else if (e.key === 'Escape') {
+              cancelCrop();
+          }
+      };
+      
+      window.addEventListener('keydown', keydownHandler);
+
+      // Add Commit/Cancel buttons
+      const checkIcon = new Image();
+      checkIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-check'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E";
+      const xIcon = new Image();
+      xIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-x'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E";
+      
+      const commitBtn = new fabric.Control({
+          x: 0.5,
+          y: 0.5,
+          offsetX: 30,
+          offsetY: 30,
+          cursorStyle: 'pointer',
+          mouseUpHandler: commitCrop,
+          render: (ctx, left, top) => {
+              ctx.save();
+              ctx.translate(left, top);
+              ctx.fillStyle = 'rgba(0,0,0,0.5)';
+              ctx.fillRect(-15, -15, 30, 30);
+              ctx.drawImage(checkIcon, -12, -12, 24, 24);
+              ctx.restore();
+          },
+      });
+
+      const cancelBtn = new fabric.Control({
+          x: -0.5,
+          y: 0.5,
+          offsetX: -30,
+          offsetY: 30,
+          cursorStyle: 'pointer',
+          mouseUpHandler: cancelCrop,
+          render: (ctx, left, top) => {
+              ctx.save();
+              ctx.translate(left, top);
+              ctx.fillStyle = 'rgba(0,0,0,0.5)';
+              ctx.fillRect(-15, -15, 30, 30);
+              ctx.drawImage(xIcon, -12, -12, 24, 24);
+              ctx.restore();
+          },
+      });
+
+      image.controls = {
+          ...fabric.Image.prototype.controls,
+          commit: commitBtn,
+          cancel: cancelBtn
+      };
+
+      canvas.renderAll();
+      return true;
+  }
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -257,24 +334,6 @@ export function LayoutCanvasClient() {
     }
   }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
 
-  useEffect(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    const handleRemoved = (opt: { target?: fabric.Object }) => {
-      if (opt.target === croppingGroupRef.current) {
-        flushSync(() => {
-          exitCropMode();
-        });
-      }
-    };
-    canvas.on('object:removed', handleRemoved);
-    return () => {
-        if (canvas) {
-            canvas.off('object:removed', handleRemoved);
-        }
-    };
-  }, [exitCropMode]);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -422,6 +481,7 @@ export function LayoutCanvasClient() {
             evented: true,
             clipPath: seen_frame,
             data: { isCropGroup: true },
+            controls: { ...fabric.Group.prototype.controls, cropControl: new fabric.Control({visible: false}) }
         });
 
         img.data = { group };
@@ -461,8 +521,13 @@ export function LayoutCanvasClient() {
   const exportImage = () => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
-
-    if (isCropMode) exitCropMode();
+    
+    // Ensure we are not in a cropping state
+    const overlay = canvas.getObjects().find(o => o.data?.isCropOverlay);
+    if(overlay) {
+        toast({ title: "Please finish cropping first", variant: "destructive" });
+        return;
+    }
     
     canvas.discardActiveObject();
     canvas.renderAll();
@@ -513,14 +578,6 @@ export function LayoutCanvasClient() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center relative">
             <canvas ref={canvasRef} className="shadow-2xl" style={{boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'}} />
-            {isCropMode && (
-              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
-                <Button onClick={exitCropMode} variant="secondary">
-                  <CheckSquare className="mr-2 h-4 w-4" />
-                  Done
-                </Button>
-              </div>
-            )}
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-background">
@@ -528,7 +585,7 @@ export function LayoutCanvasClient() {
               <div className="flex justify-center items-center space-x-2 pb-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant='ghost' size="icon" disabled={isCropMode}>
+                    <Button variant='ghost' size="icon">
                       <MousePointer />
                     </Button>
                   </TooltipTrigger>
@@ -537,7 +594,7 @@ export function LayoutCanvasClient() {
                 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={isAiProcessing || isCropMode} onClick={() => templateInputRef.current?.click()}>
+                        <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => templateInputRef.current?.click()}>
                             {isAiProcessing ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
                         </Button>
                     </TooltipTrigger>
@@ -547,7 +604,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => addBox()} disabled={isCropMode}>
+                        <Button variant="ghost" size="icon" onClick={() => addBox()}>
                             <PlusSquare />
                         </Button>
                     </TooltipTrigger>
@@ -560,7 +617,7 @@ export function LayoutCanvasClient() {
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" disabled={isCropMode}>
+                                <Button variant="ghost" size="icon">
                                     <RectangleHorizontal />
                                 </Button>
                             </PopoverTrigger>
@@ -607,7 +664,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()} disabled={isCropMode}>
+                        <Button variant="ghost" size="icon" onClick={() => colorInputRef.current?.click()}>
                             <Palette />
                         </Button>
                     </TooltipTrigger>
@@ -617,7 +674,7 @@ export function LayoutCanvasClient() {
                 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={isAiProcessing || isCropMode} onClick={() => imageInputRef.current?.click()}>
+                        <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => imageInputRef.current?.click()}>
                             {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
                         </Button>
                     </TooltipTrigger>
@@ -627,7 +684,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => changeZIndex('front')} disabled={isCropMode}>
+                      <Button variant="ghost" size="icon" onClick={() => changeZIndex('front')}>
                           <BringToFront />
                       </Button>
                   </TooltipTrigger>
@@ -636,7 +693,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => changeZIndex('back')} disabled={isCropMode}>
+                        <Button variant="ghost" size="icon" onClick={() => changeZIndex('back')}>
                             <SendToBack />
                         </Button>
                     </TooltipTrigger>
@@ -645,7 +702,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={deleteActiveBox} disabled={isCropMode}>
+                        <Button variant="ghost" size="icon" onClick={deleteActiveBox}>
                             <Trash2 />
                         </Button>
                     </TooltipTrigger>
@@ -656,7 +713,7 @@ export function LayoutCanvasClient() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={exportImage} disabled={isCropMode}>
+                        <Button variant="ghost" size="icon" onClick={exportImage}>
                             <Download />
                         </Button>
                     </TooltipTrigger>
@@ -708,5 +765,3 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
-
-    
