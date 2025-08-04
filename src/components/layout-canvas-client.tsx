@@ -128,11 +128,14 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
-    const activeImage = canvas.getActiveObject() as fabric.Image;
+    // Find the group that was being edited.
+    // It's the group that has an image whose group property is set.
+    const activeImage = canvas.getObjects('image').find(obj => (obj as fabric.Image).data?.group) as fabric.Image;
     if (!activeImage || !activeImage.data?.group) {
-      setIsCropMode(false);
-      canvas.renderAll();
-      return;
+        setIsCropMode(false);
+        canvas.selection = true;
+        canvas.renderAll();
+        return;
     }
 
     const group = activeImage.data.group as fabric.Group;
@@ -153,6 +156,9 @@ export function LayoutCanvasClient() {
       selectable: true,
       evented: true,
     });
+    
+    // Cleanup reference
+    delete activeImage.data.group;
 
     // Reattach controls to group
     canvas.discardActiveObject();
@@ -180,10 +186,6 @@ export function LayoutCanvasClient() {
     const handleDoubleClick = (opt: fabric.IEvent<MouseEvent>) => {
       if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
         enterCropMode(opt.target as fabric.Group);
-      } else if (isCropMode) {
-        if (!opt.target || opt.target.type !== 'image') {
-          exitCropMode();
-        }
       }
     };
 
@@ -194,12 +196,15 @@ export function LayoutCanvasClient() {
         if (timeSinceLastTap < 500 && lastTapTarget === opt.target) {
             if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
                 enterCropMode(opt.target as fabric.Group);
-            } else if (isCropMode && (!opt.target || opt.target.type !== 'image')) {
-                exitCropMode();
             }
             lastTapTime = 0; 
             return;
         }
+        
+        if (isCropMode && (!opt.target || opt.target.type !== 'image')) {
+          exitCropMode();
+        }
+
         lastTapTime = now;
         lastTapTarget = opt.target;
     };
@@ -697,3 +702,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
