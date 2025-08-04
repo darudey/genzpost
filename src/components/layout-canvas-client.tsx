@@ -3,6 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChangeEvent } from "react";
+import ReactDOM from "react-dom";
 import { fabric } from 'fabric';
 import { Button } from "@/components/ui/button";
 import {
@@ -51,9 +52,11 @@ import {
 } from "lucide-react";
 import { detectLayoutStructure } from "@/ai/flows/detect-layout-structure";
 import { useToast } from "@/hooks/use-toast";
+import { createCropOverlay } from "@/lib/crop-overlay";
+import { FloatingCropBar } from "@/components/ui/floating-crop-bar";
 
 type CanvasSize = { width: number; height: number };
-type CanvasSizeMap = Record<string, CanvasSize>;
+type CanvasSizeMap = { [key: string]: CanvasSize };
 type CanvasSizeKey = keyof CanvasSizeMap;
 
 const INITIAL_CANVAS_SIZES: CanvasSizeMap = {
@@ -79,9 +82,109 @@ export function LayoutCanvasClient() {
   const [newSize, setNewSize] = useState({ width: "", height: "" });
   
   const canvasSize = canvasSizes[currentSizeKey];
+  
+  const [cropState, setCropState] = useState<{
+    group: fabric.Group;
+    image: fabric.Image;
+    overlay: fabric.Rect;
+    originalImageState: any;
+  } | null>(null);
+
+  const openCrop = useCallback((group: fabric.Group) => {
+    const canvas = fabricCanvasRef.current;
+    const image = group.getObjects('image')[0] as fabric.Image;
+    if (!canvas || !image) return;
+  
+    const frame = group.getObjects('rect')[0] as fabric.Rect;
+    const { overlay } = createCropOverlay(canvas, frame);
+  
+    canvas.discardActiveObject();
+    canvas.add(overlay);
+    overlay.sendToBack();
+    group.bringToFront();
+    
+    // Save the original state
+    const originalImageState = {
+      left: image.left,
+      top: image.top,
+      scaleX: image.scaleX,
+      scaleY: image.scaleY,
+      angle: image.angle,
+    };
+  
+    // Unlock image for manipulation
+    image.set({
+      selectable: true,
+      evented: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockScalingX: false,
+      lockScalingY: false,
+      lockRotation: false,
+      hasControls: true,
+    });
+  
+    canvas.setActiveObject(image);
+    
+    canvas.getObjects().forEach(obj => {
+        if (obj !== group && obj !== overlay) {
+            obj.set({ selectable: false, evented: false });
+        }
+    });
+
+    setCropState({ group, image, overlay, originalImageState });
+    canvas.renderAll();
+  }, []);
+
+  const confirmCrop = useCallback(() => {
+    if (!cropState) return;
+    const { group, image, overlay } = cropState;
+    const canvas = fabricCanvasRef.current!;
+  
+    // Lock image again
+    image.set({
+      selectable: false,
+      evented: false,
+    });
+  
+    group.addWithUpdate(); // Recalculate group bounds
+    canvas.remove(overlay);
+    
+    canvas.getObjects().forEach(obj => {
+      obj.set({ selectable: true, evented: true });
+    });
+
+    canvas.setActiveObject(group);
+    setCropState(null);
+    canvas.renderAll();
+  }, [cropState]);
+  
+  const cancelCrop = useCallback(() => {
+    if (!cropState) return;
+    const { group, image, overlay, originalImageState } = cropState;
+    const canvas = fabricCanvasRef.current!;
+  
+    // Restore original transform
+    image.set(originalImageState);
+    image.set({
+      selectable: false,
+      evented: false,
+    });
+  
+    group.addWithUpdate(); // Recalculate group bounds
+    canvas.remove(overlay);
+
+    canvas.getObjects().forEach(obj => {
+      obj.set({ selectable: true, evented: true });
+    });
+    
+    canvas.setActiveObject(group);
+    setCropState(null);
+    canvas.renderAll();
+  }, [cropState]);
+
 
   const initCanvas = useCallback(() => {
-    // Custom Crop control
     const cropIcon = new Image();
     cropIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-crop'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E";
 
@@ -95,135 +198,8 @@ export function LayoutCanvasClient() {
 
     const startCropping = (eventData: MouseEvent, transform: fabric.Transform) => {
         const target = transform.target as fabric.Group;
-        const canvas = fabricCanvasRef.current;
-        if (!canvas || !target || !target.data?.isCropGroup) return false;
-  
-        // Hide all other objects and controls
-        canvas.getObjects().forEach(obj => {
-            if (obj !== target) {
-                obj.set({ visible: false });
-            }
-        });
-        target.set({ controls: {} }); // Hide default controls
-  
-        // Create semi-transparent overlay
-        const overlay = new fabric.Rect({
-            left: 0,
-            top: 0,
-            width: canvas.width!,
-            height: canvas.height!,
-            fill: 'rgba(0,0,0,0.7)',
-            selectable: false,
-            evented: false,
-            data: { isCropOverlay: true }
-        });
-        canvas.add(overlay);
-        overlay.sendToBack();
-        target.bringToFront();
-  
-  
-        const image = target.getObjects('image')[0] as fabric.Image;
-  
-        // Clone image to show original state
-        const originalImageState = {
-          left: image.left,
-          top: image.top,
-          scaleX: image.scaleX,
-          scaleY: image.scaleY,
-        };
-  
-        image.set({
-            selectable: true,
-            evented: true,
-            lockMovementX: false,
-            lockMovementY: false,
-            lockScalingX: false,
-            lockScalingY: false,
-            lockRotation: false,
-            hasControls: true,
-        });
-  
-        canvas.setActiveObject(image);
-  
-        const cleanupAndRestore = (restoreState: boolean) => {
-            if (restoreState) {
-                image.set(originalImageState);
-                image.setCoords();
-            }
-            // Re-lock image
-            image.set({ selectable: false, evented: false });
-            target.setCoords(); // Update group coordinates
-    
-            // Cleanup
-            canvas.remove(overlay);
-            canvas.getObjects().forEach(obj => obj.set({ visible: true }));
-            canvas.discardActiveObject();
-            canvas.setActiveObject(target);
-            target.controls.cropControl.visible = true;
-            canvas.renderAll();
-            window.removeEventListener('keydown', keydownHandler);
-        };
-        
-        const commitCrop = () => cleanupAndRestore(false);
-        const cancelCrop = () => cleanupAndRestore(true);
-  
-        const keydownHandler = (e: KeyboardEvent) => {
-            if (e.key === 'Enter') {
-                commitCrop();
-            } else if (e.key === 'Escape') {
-                cancelCrop();
-            }
-        };
-        
-        window.addEventListener('keydown', keydownHandler);
-  
-        // Add Commit/Cancel buttons
-        const checkIcon = new Image();
-        checkIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-check'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E";
-        const xIcon = new Image();
-        xIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-x'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E";
-        
-        const commitBtn = new fabric.Control({
-            x: 0.5,
-            y: 0.5,
-            offsetX: 30,
-            offsetY: 30,
-            cursorStyle: 'pointer',
-            mouseUpHandler: commitCrop,
-            render: (ctx, left, top) => {
-                ctx.save();
-                ctx.translate(left, top);
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                ctx.fillRect(-15, -15, 30, 30);
-                ctx.drawImage(checkIcon, -12, -12, 24, 24);
-                ctx.restore();
-            },
-        });
-  
-        const cancelBtn = new fabric.Control({
-            x: -0.5,
-            y: 0.5,
-            offsetX: -30,
-            offsetY: 30,
-            cursorStyle: 'pointer',
-            mouseUpHandler: cancelCrop,
-            render: (ctx, left, top) => {
-                ctx.save();
-                ctx.translate(left, top);
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                ctx.fillRect(-15, -15, 30, 30);
-                ctx.drawImage(xIcon, -12, -12, 24, 24);
-                ctx.restore();
-            },
-        });
-  
-        image.controls = {
-            ...fabric.Image.prototype.controls,
-            commit: commitBtn,
-            cancel: cancelBtn
-        };
-  
-        canvas.renderAll();
+        if (!target || !target.data?.isCropGroup) return false;
+        openCrop(target);
         return true;
     };
     
@@ -236,7 +212,6 @@ export function LayoutCanvasClient() {
         render: renderCropIcon,
     });
 
-
     const canvas = new fabric.Canvas(canvasRef.current, {
         width: canvasSize.width,
         height: canvasSize.height,
@@ -247,16 +222,22 @@ export function LayoutCanvasClient() {
     fabricCanvasRef.current = canvas;
 
     const updateControlsVisibility = (target?: fabric.Object) => {
-      if (target && target.data?.isCropGroup) {
-        target.controls.cropControl.visible = true;
-      }
+        if (target && target.data?.isCropGroup) {
+            target.controls.cropControl.visible = true;
+        }
     };
     
     canvas.on('selection:created', (e) => updateControlsVisibility(e.target));
     canvas.on('selection:updated', (e) => updateControlsVisibility(e.target));
+
+    canvas.on('object:removed', (e) => {
+        if (cropState && e.target === cropState.group) {
+          cancelCrop();
+        }
+    });
     
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, openCrop, cropState, cancelCrop]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -297,20 +278,35 @@ export function LayoutCanvasClient() {
 
     const resizeObserver = new ResizeObserver(fitCanvasToContainer);
     
-    const currentCanvasWrapper = canvasWrapperRef.current;
-    if (currentCanvasWrapper) {
-        resizeObserver.observe(currentCanvasWrapper);
+    const wrapper = canvasWrapperRef.current;
+    if (wrapper) {
+        resizeObserver.observe(wrapper);
     }
     
     fitCanvasToContainer();
     
     return () => {
-      if (currentCanvasWrapper) {
-        resizeObserver.disconnect();
-      }
+        if(wrapper) {
+            resizeObserver.disconnect();
+        }
     }
   }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
 
+
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+  
+    const handleRemoved = (opt: { target?: fabric.Object }) => {
+      if (cropState && opt.target === cropState.group) {
+        cancelCrop();
+      }
+    };
+    canvas.on('object:removed', handleRemoved);
+    return () => {
+      canvas.off('object:removed', handleRemoved);
+    };
+  }, [cropState, cancelCrop]);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -497,9 +493,7 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
     
-    // Ensure we are not in a cropping state
-    const overlay = canvas.getObjects().find(o => o.data?.isCropOverlay);
-    if(overlay) {
+    if(cropState) {
         toast({ title: "Please finish cropping first", variant: "destructive" });
         return;
     }
@@ -553,6 +547,12 @@ export function LayoutCanvasClient() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <main ref={canvasWrapperRef} className="flex-1 p-4 bg-muted/40 flex items-center justify-center relative">
             <canvas ref={canvasRef} className="shadow-2xl" style={{boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'}} />
+             {cropState && (
+              <FloatingCropBar
+                onDone={confirmCrop}
+                onCancel={cancelCrop}
+              />
+            )}
         </main>
         <TooltipProvider>
           <aside className="p-2 border-t bg-background">
@@ -587,12 +587,12 @@ export function LayoutCanvasClient() {
                 </Tooltip>
                 
                 <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                            <Crop />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top"><p>Crop Image</p></TooltipContent>
+                  <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" disabled>
+                          <Crop />
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top"><p>Select a box and click the crop icon</p></TooltipContent>
                 </Tooltip>
 
                 <div className="flex-grow" />
@@ -658,7 +658,7 @@ export function LayoutCanvasClient() {
                 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={isAiProcessing} onClick={() => imageInputRef.current?.click()}>
+                        <Button variant="ghost" size="icon" disabled={isAiProcessing || !!cropState} onClick={() => imageInputRef.current?.click()}>
                             {isAiProcessing ? <Loader2 className="animate-spin" /> : <ImageUp />}
                         </Button>
                     </TooltipTrigger>
@@ -749,3 +749,5 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
