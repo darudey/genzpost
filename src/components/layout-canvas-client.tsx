@@ -605,7 +605,7 @@ export function LayoutCanvasClient() {
                 <input ref={imageInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
 
                 <Tooltip>
-                    <TooltipTrigger as Child>
+                    <TooltipTrigger>
                         <Button variant="ghost" size="icon" onClick={() => changeZIndex('front')} disabled={isCropMode}>
                             <BringToFront />
                         </Button>
@@ -614,7 +614,7 @@ export function LayoutCanvasClient() {
                 </Tooltip>
 
                 <Tooltip>
-                    <TooltipTrigger as Child>
+                    <TooltipTrigger>
                         <Button variant="ghost" size="icon" onClick={() => changeZIndex('back')} disabled={isCropMode}>
                             <SendToBack />
                         </Button>
@@ -687,5 +687,7 @@ export function LayoutCanvasClient() {
     </div>
   );
 }
+
+    
 
     
