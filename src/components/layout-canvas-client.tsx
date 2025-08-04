@@ -115,28 +115,36 @@ export function LayoutCanvasClient() {
   /* --- ENTER CROP MODE --- */
   function openCrop(group: fabric.Group) {
     const canvas = fabricCanvasRef.current!;
-    const image   = group.getObjects('image')[0] as fabric.Image;
-    const frame   = group.getObjects('rect')[0] as fabric.Rect;
+    const image = group.getObjects().find(obj => obj.name === 'image') as fabric.Image | undefined;
+    
+    if (!image) {
+      toast({ title: "No image to crop", description: "This box doesn't contain an image.", variant: "destructive"});
+      return;
+    }
+
+    const frame = group.getObjects('rect')[0] as fabric.Rect;
 
     group.visible = false;
 
-    const tempImg = image.clone() as fabric.Image;
-    tempImg.set({
-      selectable: true,
-      evented: true,
-      lockRotation: true,
-      cornerSize: 12,
-      cornerColor: '#fff',
-      transparentCorners: false,
+    image.clone((clonedImg: fabric.Image) => {
+        const tempImg = clonedImg;
+        tempImg.set({
+            selectable: true,
+            evented: true,
+            lockRotation: true,
+            cornerSize: 12,
+            cornerColor: '#fff',
+            transparentCorners: false,
+        });
+        canvas.add(tempImg);
+
+        const { overlay } = createCropOverlay(canvas, frame);
+        canvas.add(overlay);
+
+        cropSessionRef.current = { group, frame, tempImg, overlay };
+        // We must manually trigger a re-render to show the floating bar
+        setCropIconPosition(null);
     });
-    canvas.add(tempImg);
-
-    const { overlay } = createCropOverlay(canvas, frame);
-    canvas.add(overlay);
-
-    cropSessionRef.current = { group, frame, tempImg, overlay };
-    // We must manually trigger a re-render to show the floating bar
-    setCropIconPosition(null); 
   }
 
   /* --- FINISH CROP --- */
@@ -151,17 +159,22 @@ export function LayoutCanvasClient() {
     const cropped = new fabric.Image(tempImg.getElement(), {
       cropX: cropRect.left - frameRect.left,
       cropY: cropRect.top  - frameRect.top,
-      cropWidth:  Math.min(frameRect.width,  cropRect.width),
-      cropHeight: Math.min(frameRect.height, cropRect.height),
-      scaleX: frameRect.width  / cropRect.width,
+      width: frameRect.width,
+      height: frameRect.height,
+      scaleX: frameRect.width / cropRect.width,
       scaleY: frameRect.height / cropRect.height,
       left: frame.left,
       top:  frame.top,
       selectable: false,
       evented: false,
+      name: 'image',
     });
+    
+    const oldImage = group.getObjects().find(o => o.name === 'image');
+    if (oldImage) {
+        group.remove(oldImage);
+    }
 
-    group.remove(group.getObjects('image')[0]);
     group.addWithUpdate(cropped);
     group.visible = true;
 
@@ -367,7 +380,7 @@ export function LayoutCanvasClient() {
         const dataUrl = reader.result as string;
         
         fabric.Image.fromURL(dataUrl, (img) => {
-            const oldUnseenFrame = group.getObjects('image')[0];
+            const oldUnseenFrame = group.getObjects().find(o => o.name === 'image');
             if (oldUnseenFrame) {
                 group.remove(oldUnseenFrame);
             }
@@ -768,5 +781,3 @@ function createCropOverlay(canvas: fabric.Canvas, frame: fabric.Rect) {
 
   return { overlay };
 }
-
-    
