@@ -350,9 +350,9 @@ export function LayoutCanvasClient() {
             }
 
             img.set({
+              name: 'image',
               originX: 'center',
               originY: 'center',
-              data: { group },
               selectable: false,
               evented: false,
             });
@@ -363,7 +363,6 @@ export function LayoutCanvasClient() {
             const scale = Math.max(frameWidth / img.width!, frameHeight / img.height!);
             img.scale(scale);
 
-            img.clipPath = seen_frame;
             group.addWithUpdate(img);
             img.sendToBack();
             
@@ -383,14 +382,14 @@ export function LayoutCanvasClient() {
     const rectTop = top || (canvas.height! - rectHeight) / 2;
 
     const seen_frame = new fabric.Rect({
-        left: 0,
-        top: 0,
+        name: 'rect',
         width: rectWidth,
         height: rectHeight,
         fill: 'transparent',
         stroke: '#ccc',
         strokeWidth: 2,
-        absolutePositioned: true, 
+        originX: 'center',
+        originY: 'center',
     });
 
     fabric.Image.fromURL(`https://placehold.co/${rectWidth}x${rectHeight}.png`, (img) => {
@@ -405,14 +404,13 @@ export function LayoutCanvasClient() {
         const scale = Math.max(rectWidth / img.width!, rectHeight / img.height!);
         img.scale(scale);
         
-        img.clipPath = seen_frame;
-        
         const group = new fabric.Group([seen_frame, img], {
             left: rectLeft,
             top: rectTop,
-            data: { isCropGroup: true },
             selectable: true,
             evented: true,
+            clipPath: seen_frame,
+            data: { isCropGroup: true },
         });
 
         img.data = { group };
