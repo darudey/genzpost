@@ -1,14 +1,7 @@
-
 import { fabric } from 'fabric';
 
-export function createCropOverlay(
-  canvas: fabric.Canvas,
-  frame: fabric.Rect
-) {
-  const vpt = canvas.viewportTransform;
-  if (!vpt) return { overlay: new fabric.Rect() };
-
-  // The dark backdrop, covering the entire canvas
+export function createCropOverlay(canvas: fabric.Canvas, frame: fabric.Rect) {
+  // 1. Full-screen backdrop
   const overlay = new fabric.Rect({
     left: 0,
     top: 0,
@@ -19,21 +12,21 @@ export function createCropOverlay(
     evented: false,
   });
 
-  // Get the absolute bounding rectangle of the frame
-  const frameRect = frame.getBoundingRect(true);
-
-  // Create the "hole" for the clip path.
-  // It's crucial to set absolutePositioned: true so that the clip path
-  // is not affected by the overlay's own transformations.
+  // 2. Re-use the frame’s geometry for the hole
+  //    Fabric’s clipPath is applied *before* transforms, so
+  //    we simply clone the frame (absolutePositioned true).
   const clipRect = new fabric.Rect({
-    left: frameRect.left,
-    top: frameRect.top,
-    width: frameRect.width,
-    height: frameRect.height,
+    left: frame.left,
+    top: frame.top,
+    width: frame.width! * frame.scaleX!,
+    height: frame.height! * frame.scaleY!,
+    angle: frame.angle ?? 0,
+    skewX: frame.skewX ?? 0,
+    skewY: frame.skewY ?? 0,
     absolutePositioned: true,
   });
 
   overlay.clipPath = clipRect;
 
-  return { overlay };
+  return { overlay, clipRect };
 }
