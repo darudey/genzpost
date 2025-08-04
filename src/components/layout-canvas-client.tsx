@@ -3,8 +3,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChangeEvent } from "react";
-import ReactDOM from "react-dom";
 import { fabric } from 'fabric';
+import { flushSync } from 'react-dom';
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -57,7 +57,6 @@ import { FloatingCropBar } from "@/components/ui/floating-crop-bar";
 
 type CanvasSize = { width: number; height: number };
 type CanvasSizeMap = { [key: string]: CanvasSize };
-type CanvasSizeKey = keyof CanvasSizeMap;
 
 const INITIAL_CANVAS_SIZES: CanvasSizeMap = {
     "400x600": { width: 400, height: 600 },
@@ -75,7 +74,7 @@ export function LayoutCanvasClient() {
   const [canvasBgColor, setCanvasBgColor] = useState("#F8F8FF");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [canvasSizes, setCanvasSizes] = useState<CanvasSizeMap>(INITIAL_CANVAS_SIZES);
-  const [currentSizeKey, setCurrentSizeKey] = useState<CanvasSizeKey>("400x600");
+  const [currentSizeKey, setCurrentSizeKey] = useState<keyof CanvasSizeMap>("400x600");
   const [isEditSizesOpen, setIsEditSizesOpen] = useState(false);
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [tempSizes, setTempSizes] = useState(canvasSizes);
@@ -103,7 +102,6 @@ export function LayoutCanvasClient() {
     overlay.sendToBack();
     group.bringToFront();
     
-    // Save the original state
     const originalImageState = {
       left: image.left,
       top: image.top,
@@ -112,7 +110,6 @@ export function LayoutCanvasClient() {
       angle: image.angle,
     };
   
-    // Unlock image for manipulation
     image.set({
       selectable: true,
       evented: true,
@@ -121,6 +118,7 @@ export function LayoutCanvasClient() {
       lockScalingX: false,
       lockScalingY: false,
       lockRotation: false,
+      lockUniScaling: true, 
       hasControls: true,
     });
   
@@ -132,22 +130,41 @@ export function LayoutCanvasClient() {
         }
     });
 
-    setCropState({ group, image, overlay, originalImageState });
+    const handleMouseWheel = (opt: fabric.IEvent<WheelEvent>) => {
+        opt.e.preventDefault();
+        opt.e.stopPropagation();
+
+        const target = canvas.getActiveObject();
+        if (!target || target !== image) return;
+    
+        const delta = opt.e.deltaY;
+        let zoom = target.scaleX || 1;
+        zoom *= 0.999 ** delta;
+    
+        target.scale(zoom);
+        canvas.requestRenderAll();
+    };
+    canvas.on('mouse:wheel', handleMouseWheel);
+
+    flushSync(() => {
+        setCropState({ group, image, overlay, originalImageState });
+    });
     canvas.renderAll();
-  }, []);
+  }, [toast]);
 
   const confirmCrop = useCallback(() => {
     if (!cropState) return;
     const { group, image, overlay } = cropState;
     const canvas = fabricCanvasRef.current!;
   
-    // Lock image again
+    canvas.off('mouse:wheel');
+
     image.set({
       selectable: false,
       evented: false,
     });
   
-    group.addWithUpdate(); // Recalculate group bounds
+    group.addWithUpdate();
     canvas.remove(overlay);
     
     canvas.getObjects().forEach(obj => {
@@ -155,7 +172,7 @@ export function LayoutCanvasClient() {
     });
 
     canvas.setActiveObject(group);
-    setCropState(null);
+    flushSync(() => setCropState(null));
     canvas.renderAll();
   }, [cropState]);
   
@@ -164,14 +181,15 @@ export function LayoutCanvasClient() {
     const { group, image, overlay, originalImageState } = cropState;
     const canvas = fabricCanvasRef.current!;
   
-    // Restore original transform
+    canvas.off('mouse:wheel');
+
     image.set(originalImageState);
     image.set({
       selectable: false,
       evented: false,
     });
   
-    group.addWithUpdate(); // Recalculate group bounds
+    group.addWithUpdate();
     canvas.remove(overlay);
 
     canvas.getObjects().forEach(obj => {
@@ -179,7 +197,7 @@ export function LayoutCanvasClient() {
     });
     
     canvas.setActiveObject(group);
-    setCropState(null);
+    flushSync(() => setCropState(null));
     canvas.renderAll();
   }, [cropState]);
 
@@ -229,15 +247,9 @@ export function LayoutCanvasClient() {
     
     canvas.on('selection:created', (e) => updateControlsVisibility(e.target));
     canvas.on('selection:updated', (e) => updateControlsVisibility(e.target));
-
-    canvas.on('object:removed', (e) => {
-        if (cropState && e.target === cropState.group) {
-          cancelCrop();
-        }
-    });
     
     return canvas;
-  }, [canvasSize.width, canvasSize.height, canvasBgColor, openCrop, cropState, cancelCrop]);
+  }, [canvasSize.width, canvasSize.height, canvasBgColor, openCrop]);
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -299,7 +311,9 @@ export function LayoutCanvasClient() {
   
     const handleRemoved = (opt: { target?: fabric.Object }) => {
       if (cropState && opt.target === cropState.group) {
-        cancelCrop();
+        flushSync(() => {
+          cancelCrop();
+        });
       }
     };
     canvas.on('object:removed', handleRemoved);
@@ -537,7 +551,7 @@ export function LayoutCanvasClient() {
   const handleSaveSizes = () => {
     setCanvasSizes(tempSizes);
     if (!tempSizes[currentSizeKey]) {
-      setCurrentSizeKey(Object.keys(tempSizes)[0] as CanvasSizeKey);
+      setCurrentSizeKey(Object.keys(tempSizes)[0] as keyof CanvasSizeMap);
     }
     setIsEditSizesOpen(false);
   };
@@ -614,7 +628,7 @@ export function LayoutCanvasClient() {
                             <div className="flex items-center gap-2">
                                 <Select
                                     value={currentSizeKey}
-                                    onValueChange={(value: CanvasSizeKey) => {
+                                    onValueChange={(value: keyof CanvasSizeMap) => {
                                       setCurrentSizeKey(value);
                                       setIsSizePopoverOpen(false);
                                     }}
