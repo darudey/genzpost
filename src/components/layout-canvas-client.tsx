@@ -97,7 +97,6 @@ export function LayoutCanvasClient() {
     }
     const activeObject = canvas.getActiveObject();
     if (activeObject && activeObject.data?.isCropGroup) {
-      // Need to account for canvas position on the page
       const canvasRect = canvas.getElement().getBoundingClientRect();
       const zoom = canvas.getZoom();
       const { tr } = activeObject.oCoords!;
@@ -117,14 +116,25 @@ export function LayoutCanvasClient() {
   const confirmCrop = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!cropState || !canvas) return;
-  
+
     canvas.off('mouse:wheel');
     const { group, image, overlay } = cropState;
-  
+
+    const frame = group.getObjects('rect')[0] as fabric.Rect;
+
+    const frameWidth = frame.width! * (frame.scaleX || 1);
+    const frameHeight = frame.height! * (frame.scaleY || 1);
+    const scale = Math.max(frameWidth / image.width!, frameHeight / image.height!);
+
     image.set({
-      selectable: false,
-      evented: false,
-      hasControls: false,
+        scaleX: scale,
+        scaleY: scale,
+        left: (frameWidth - image.width! * scale) / 2,
+        top: (frameHeight - image.height! * scale) / 2,
+        angle: 0,
+        selectable: false,
+        evented: false,
+        hasControls: false,
     });
   
     group.addWithUpdate();
@@ -169,7 +179,6 @@ export function LayoutCanvasClient() {
     const canvas = fabricCanvasRef.current;
     if (!canvas || !group) return;
 
-    // If we're already cropping, cancel the old one first.
     if (cropState) {
         cancelCrop();
     }
