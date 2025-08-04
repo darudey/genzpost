@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { flushSync } from "react-dom";
 import type { ChangeEvent } from "react";
 import { fabric } from 'fabric';
 import { Button } from "@/components/ui/button";
@@ -61,13 +60,6 @@ const INITIAL_CANVAS_SIZES: CanvasSizeMap = {
     "400x600": { width: 400, height: 600 },
 };
 
-// Helper function to render a Lucide icon as an SVG string
-const renderIcon = (icon: any, options: any = {}) => {
-  const Icon = icon;
-  const { size = 24, color = 'black' } = options;
-  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${new Icon(options).render().props.children}</svg>`)}`;
-};
-
 export function LayoutCanvasClient() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
@@ -101,6 +93,140 @@ export function LayoutCanvasClient() {
         ctx.restore();
     };
 
+    const startCropping = (eventData: MouseEvent, transform: fabric.Transform) => {
+        const target = transform.target as fabric.Group;
+        const canvas = fabricCanvasRef.current;
+        if (!canvas || !target || !target.data?.isCropGroup) return false;
+  
+        // Hide all other objects and controls
+        canvas.getObjects().forEach(obj => {
+            if (obj !== target) {
+                obj.set({ visible: false });
+            }
+        });
+        target.set({ controls: {} }); // Hide default controls
+  
+        // Create semi-transparent overlay
+        const overlay = new fabric.Rect({
+            left: 0,
+            top: 0,
+            width: canvas.width!,
+            height: canvas.height!,
+            fill: 'rgba(0,0,0,0.7)',
+            selectable: false,
+            evented: false,
+            data: { isCropOverlay: true }
+        });
+        canvas.add(overlay);
+        overlay.sendToBack();
+        target.bringToFront();
+  
+  
+        const image = target.getObjects('image')[0] as fabric.Image;
+  
+        // Clone image to show original state
+        const originalImageState = {
+          left: image.left,
+          top: image.top,
+          scaleX: image.scaleX,
+          scaleY: image.scaleY,
+        };
+  
+        image.set({
+            selectable: true,
+            evented: true,
+            lockMovementX: false,
+            lockMovementY: false,
+            lockScalingX: false,
+            lockScalingY: false,
+            lockRotation: false,
+            hasControls: true,
+        });
+  
+        canvas.setActiveObject(image);
+  
+        const cleanupAndRestore = (restoreState: boolean) => {
+            if (restoreState) {
+                image.set(originalImageState);
+                image.setCoords();
+            }
+            // Re-lock image
+            image.set({ selectable: false, evented: false });
+            target.setCoords(); // Update group coordinates
+    
+            // Cleanup
+            canvas.remove(overlay);
+            canvas.getObjects().forEach(obj => obj.set({ visible: true }));
+            canvas.discardActiveObject();
+            canvas.setActiveObject(target);
+            target.controls.cropControl.visible = true;
+            canvas.renderAll();
+            window.removeEventListener('keydown', keydownHandler);
+        };
+        
+        const commitCrop = () => cleanupAndRestore(false);
+        const cancelCrop = () => cleanupAndRestore(true);
+  
+        const keydownHandler = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                commitCrop();
+            } else if (e.key === 'Escape') {
+                cancelCrop();
+            }
+        };
+        
+        window.addEventListener('keydown', keydownHandler);
+  
+        // Add Commit/Cancel buttons
+        const checkIcon = new Image();
+        checkIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-check'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E";
+        const xIcon = new Image();
+        xIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-x'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E";
+        
+        const commitBtn = new fabric.Control({
+            x: 0.5,
+            y: 0.5,
+            offsetX: 30,
+            offsetY: 30,
+            cursorStyle: 'pointer',
+            mouseUpHandler: commitCrop,
+            render: (ctx, left, top) => {
+                ctx.save();
+                ctx.translate(left, top);
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(-15, -15, 30, 30);
+                ctx.drawImage(checkIcon, -12, -12, 24, 24);
+                ctx.restore();
+            },
+        });
+  
+        const cancelBtn = new fabric.Control({
+            x: -0.5,
+            y: 0.5,
+            offsetX: -30,
+            offsetY: 30,
+            cursorStyle: 'pointer',
+            mouseUpHandler: cancelCrop,
+            render: (ctx, left, top) => {
+                ctx.save();
+                ctx.translate(left, top);
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(-15, -15, 30, 30);
+                ctx.drawImage(xIcon, -12, -12, 24, 24);
+                ctx.restore();
+            },
+        });
+  
+        image.controls = {
+            ...fabric.Image.prototype.controls,
+            commit: commitBtn,
+            cancel: cancelBtn
+        };
+  
+        canvas.renderAll();
+        return true;
+    };
+    
     fabric.Object.prototype.controls.cropControl = new fabric.Control({
         x: 0,
         y: -0.5,
@@ -120,168 +246,17 @@ export function LayoutCanvasClient() {
     });
     fabricCanvasRef.current = canvas;
 
-    canvas.on('selection:created', (e) => {
-        if (e.target && e.target.data?.isCropGroup) {
-            e.target.controls.cropControl.visible = true;
-        }
-    });
-
-    canvas.on('selection:updated', (e) => {
-        if (e.target && e.target.data?.isCropGroup) {
-            e.target.controls.cropControl.visible = true;
-        }
-    });
+    const updateControlsVisibility = (target?: fabric.Object) => {
+      if (target && target.data?.isCropGroup) {
+        target.controls.cropControl.visible = true;
+      }
+    };
+    
+    canvas.on('selection:created', (e) => updateControlsVisibility(e.target));
+    canvas.on('selection:updated', (e) => updateControlsVisibility(e.target));
     
     return canvas;
   }, [canvasSize.width, canvasSize.height, canvasBgColor]);
-
-
-  function startCropping(eventData: MouseEvent, transform: fabric.Transform) {
-      const target = transform.target as fabric.Group;
-      const canvas = fabricCanvasRef.current;
-      if (!canvas || !target || !target.data?.isCropGroup) return false;
-
-      // Hide all other objects and controls
-      canvas.getObjects().forEach(obj => {
-          if (obj !== target) {
-              obj.set({ visible: false });
-          }
-      });
-      target.set({ controls: {} }); // Hide default controls
-
-      // Create semi-transparent overlay
-      const overlay = new fabric.Rect({
-          left: 0,
-          top: 0,
-          width: canvas.width!,
-          height: canvas.height!,
-          fill: 'rgba(0,0,0,0.7)',
-          selectable: false,
-          evented: false,
-          data: { isCropOverlay: true }
-      });
-      canvas.add(overlay);
-      overlay.sendToBack();
-      target.bringToFront();
-
-
-      const image = target.getObjects('image')[0] as fabric.Image;
-      const frame = target.getObjects('rect')[0] as fabric.Rect;
-
-      // Clone image to show original state
-      const originalImageState = {
-        left: image.left,
-        top: image.top,
-        scaleX: image.scaleX,
-        scaleY: image.scaleY,
-      };
-
-      image.set({
-          selectable: true,
-          evented: true,
-          lockMovementX: false,
-          lockMovementY: false,
-          lockScalingX: false,
-          lockScalingY: false,
-          lockRotation: false,
-          hasControls: true,
-      });
-
-      canvas.setActiveObject(image);
-
-      const commitCrop = () => {
-          // Re-lock image
-          image.set({ selectable: false, evented: false });
-          target.setCoords(); // Update group coordinates
-
-          // Cleanup
-          canvas.remove(overlay);
-          canvas.getObjects().forEach(obj => obj.set({ visible: true }));
-          canvas.discardActiveObject();
-          canvas.setActiveObject(target);
-          target.controls.cropControl.visible = true;
-          canvas.renderAll();
-          window.removeEventListener('keydown', keydownHandler);
-      };
-
-      const cancelCrop = () => {
-          // Restore original image state
-          image.set(originalImageState);
-          image.setCoords();
-          
-          // Re-lock image
-          image.set({ selectable: false, evented: false });
-          target.setCoords(); // Update group coordinates
-
-          // Cleanup
-          canvas.remove(overlay);
-          canvas.getObjects().forEach(obj => obj.set({ visible: true }));
-          canvas.discardActiveObject();
-          canvas.setActiveObject(target);
-          target.controls.cropControl.visible = true;
-          canvas.renderAll();
-          window.removeEventListener('keydown', keydownHandler);
-      };
-
-      const keydownHandler = (e: KeyboardEvent) => {
-          if (e.key === 'Enter') {
-              commitCrop();
-          } else if (e.key === 'Escape') {
-              cancelCrop();
-          }
-      };
-      
-      window.addEventListener('keydown', keydownHandler);
-
-      // Add Commit/Cancel buttons
-      const checkIcon = new Image();
-      checkIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-check'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E";
-      const xIcon = new Image();
-      xIcon.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-x'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E";
-      
-      const commitBtn = new fabric.Control({
-          x: 0.5,
-          y: 0.5,
-          offsetX: 30,
-          offsetY: 30,
-          cursorStyle: 'pointer',
-          mouseUpHandler: commitCrop,
-          render: (ctx, left, top) => {
-              ctx.save();
-              ctx.translate(left, top);
-              ctx.fillStyle = 'rgba(0,0,0,0.5)';
-              ctx.fillRect(-15, -15, 30, 30);
-              ctx.drawImage(checkIcon, -12, -12, 24, 24);
-              ctx.restore();
-          },
-      });
-
-      const cancelBtn = new fabric.Control({
-          x: -0.5,
-          y: 0.5,
-          offsetX: -30,
-          offsetY: 30,
-          cursorStyle: 'pointer',
-          mouseUpHandler: cancelCrop,
-          render: (ctx, left, top) => {
-              ctx.save();
-              ctx.translate(left, top);
-              ctx.fillStyle = 'rgba(0,0,0,0.5)';
-              ctx.fillRect(-15, -15, 30, 30);
-              ctx.drawImage(xIcon, -12, -12, 24, 24);
-              ctx.restore();
-          },
-      });
-
-      image.controls = {
-          ...fabric.Image.prototype.controls,
-          commit: commitBtn,
-          cancel: cancelBtn
-      };
-
-      canvas.renderAll();
-      return true;
-  }
 
   const fitCanvasToContainer = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -330,7 +305,9 @@ export function LayoutCanvasClient() {
     fitCanvasToContainer();
     
     return () => {
-      resizeObserver.disconnect();
+      if (currentCanvasWrapper) {
+        resizeObserver.disconnect();
+      }
     }
   }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
 
@@ -462,7 +439,7 @@ export function LayoutCanvasClient() {
         originY: 'center',
     });
 
-    fabric.Image.fromURL(`https://placehold.co/${rectWidth}x${rectHeight}.png`, (img) => {
+    fabric.Image.fromURL(`https://placehold.co/${Math.round(rectWidth)}x${Math.round(rectHeight)}.png`, (img) => {
         img.set({
             name: 'image',
             originX: 'center',
@@ -483,8 +460,6 @@ export function LayoutCanvasClient() {
             data: { isCropGroup: true },
             controls: { ...fabric.Group.prototype.controls, cropControl: new fabric.Control({visible: false}) }
         });
-
-        img.data = { group };
 
         canvas.add(group);
         canvas.setActiveObject(group);
