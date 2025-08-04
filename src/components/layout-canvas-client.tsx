@@ -122,32 +122,34 @@ export function LayoutCanvasClient() {
 
   const exitCropMode = useCallback(() => {
     const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
     const group = croppingGroupRef.current;
-    
-    if (group) {
-      const image = group.getObjects('image')[0] as fabric.Image;
-      if (image) {
-        image.set({
-          selectable: false,
-          evented: false,
-          lockMovementX: true,
-          lockMovementY: true,
-          lockScalingX: true,
-          lockScalingY: true,
-          lockRotation: true,
-        });
-      }
+    if (!canvas || !group) {
+        setIsCropMode(false);
+        croppingGroupRef.current = null;
+        if(canvas) canvas.selection = true;
+        return;
+    };
 
-      group.set({
+    const image = group.getObjects('image')[0] as fabric.Image;
+    if (image) {
+        image.set({
+            selectable: false,
+            evented: false,
+            lockMovementX: true,
+            lockMovementY: true,
+            lockScalingX: true,
+            lockScalingY: true,
+            lockRotation: true,
+        });
+    }
+
+    group.set({
         selectable: true,
         evented: true,
-      });
+    });
 
-      canvas.discardActiveObject();
-      canvas.setActiveObject(group);
-    }
+    canvas.discardActiveObject();
+    canvas.setActiveObject(group);
     
     canvas.selection = true;
     setIsCropMode(false);
@@ -166,33 +168,20 @@ export function LayoutCanvasClient() {
     });
     fabricCanvasRef.current = canvas;
     
-    let lastTapTime = 0;
-    let lastTapTarget: fabric.Object | undefined;
-
     const handleDoubleClick = (opt: fabric.IEvent<MouseEvent>) => {
       if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
         enterCropMode(opt.target as fabric.Group);
       }
     };
-
-    const handleTap = (opt: fabric.IEvent<MouseEvent>) => {
-        const now = new Date().getTime();
-        const timeSinceLastTap = now - lastTapTime;
-
-        if (timeSinceLastTap < 500 && lastTapTarget === opt.target) {
-            if (opt.target && opt.target.data?.isCropGroup && !isCropMode) {
-                enterCropMode(opt.target as fabric.Group);
-            }
-            lastTapTime = 0; 
-            return;
-        }
-
-        lastTapTime = now;
-        lastTapTarget = opt.target;
-    };
     
     canvas.on('mouse:dblclick', handleDoubleClick);
-    canvas.on('mouse:up', handleTap);
+
+    canvas.on('mouse:down', (opt) => {
+      if (isCropMode && opt.target !== canvas.getActiveObject()) {
+        // In crop mode, do nothing if the user clicks outside the active image
+        return;
+      }
+    });
 
     return canvas;
   }, [canvasSize.width, canvasSize.height, canvasBgColor, isCropMode, enterCropMode]);
@@ -250,7 +239,7 @@ export function LayoutCanvasClient() {
         resizeObserver.unobserve(currentCanvasWrapper);
       }
     }
-  }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor, canvasWrapperRef]);
+  }, [initCanvas, fitCanvasToContainer, canvasSize, canvasBgColor]);
 
   const handleTemplateFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
